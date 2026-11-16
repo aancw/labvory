@@ -56,7 +56,7 @@ func TestIntegrationsWorkflow(t *testing.T) {
 	// rather than silently storing plaintext.
 	createResp := performJSONExpectError(t, client, tsURL(t), http.MethodPost, "/api/v1/integrations", map[string]any{
 		"kind": "proxmox", "name": "pve", "enabled": true,
-		"config": map[string]any{"endpoint": proxmox.URL, "token_id": "root!sync", "verify_tls": false},
+		"config":  map[string]any{"endpoint": proxmox.URL, "token_id": "root!sync", "verify_tls": false},
 		"secrets": map[string]any{"token_secret": "super-secret-value"},
 	})
 	if createResp["error"].(map[string]any)["code"] != "secrets_unavailable" {
@@ -89,7 +89,7 @@ func TestIntegrationsWorkflow(t *testing.T) {
 
 	integ2 := do2(http.MethodPost, "/api/v1/integrations", map[string]any{
 		"kind": "proxmox", "name": "pve", "enabled": true,
-		"config": map[string]any{"endpoint": proxmox.URL, "token_id": "root!sync", "verify_tls": false},
+		"config":  map[string]any{"endpoint": proxmox.URL, "token_id": "root!sync", "verify_tls": false},
 		"secrets": map[string]any{"token_secret": "super-secret-value"},
 	}, http.StatusCreated)
 	integID2 := integ2["id"].(string)
