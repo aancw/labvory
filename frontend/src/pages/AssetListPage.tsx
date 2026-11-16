@@ -129,7 +129,7 @@ export function AssetListPage() {
     } catch {
       // fall through to defaults
     }
-    return { primary_ip: true, os: true, parent: true, env: true }
+    return { primary_ip: true, mac: true, os: true, parent: true, env: true }
   })
   const toggleColumn = (key: string) => {
     setColumns((prev) => {
@@ -336,6 +336,9 @@ export function AssetListPage() {
             <DropdownMenuCheckboxItem checked={columns.primary_ip ?? true} onCheckedChange={() => toggleColumn("primary_ip")}>
               Primary IP
             </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={columns.mac ?? true} onCheckedChange={() => toggleColumn("mac")}>
+              MAC
+            </DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem checked={columns.os ?? true} onCheckedChange={() => toggleColumn("os")}>
               OS
             </DropdownMenuCheckboxItem>
@@ -451,6 +454,7 @@ export function AssetListPage() {
                 <SortableHead label="Name" param="name" sort={sort} order={order} onSort={setParam} />
                 <TableHead>Type</TableHead>
                 {(columns.primary_ip ?? true) ? <TableHead>Primary IP</TableHead> : null}
+                {(columns.mac ?? true) ? <TableHead>MAC</TableHead> : null}
                 {(columns.os ?? true) ? <TableHead>OS</TableHead> : null}
                 {(columns.parent ?? true) ? <TableHead>Parent host</TableHead> : null}
                 <SortableHead label="Status" param="status" sort={sort} order={order} onSort={setParam} />
@@ -490,6 +494,9 @@ export function AssetListPage() {
                   </TableCell>
                   {(columns.primary_ip ?? true) ? (
                     <TableCell className="font-mono text-xs">{asset.primary_ip ?? "—"}</TableCell>
+                  ) : null}
+                  {(columns.mac ?? true) ? (
+                    <TableCell className="font-mono text-xs">{asset.mac_addresses || "—"}</TableCell>
                   ) : null}
                   {(columns.os ?? true) ? (
                     <TableCell className="text-muted-foreground">

@@ -150,6 +150,8 @@ export interface Asset {
     observed?: { status?: string; checked_at?: string }
   } & Record<string, unknown>
   primary_ip?: string | null
+  /** Interface MAC addresses (comma-separated when several). */
+  mac_addresses?: string
   child_count: number
   tags: Tag[]
   created_at: string

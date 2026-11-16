@@ -31,6 +31,7 @@ type Asset struct {
 	ID              string          `json:"id"`
 	Name            string          `json:"name"`
 	Hostname        string          `json:"hostname"`
+	MACAddresses    string          `json:"mac_addresses"`
 	TypeID          string          `json:"type_id"`
 	TypeLabel       string          `json:"type_label"`
 	TypeSlug        string          `json:"type_slug"`
@@ -98,7 +99,10 @@ const assetColumns = `
 	a.cpu_cores, a.ram_gb, a.storage_gb,
 	TO_CHAR(a.purchase_date, 'YYYY-MM-DD'), a.purchase_cost, TO_CHAR(a.warranty_expires, 'YYYY-MM-DD'),
 	a.notes, a.source, a.metadata,
-	a.created_at, a.updated_at`
+	a.created_at, a.updated_at,
+	COALESCE((SELECT string_agg(ni.mac_address, ', ' ORDER BY ni.name)
+	          FROM network_interfaces ni
+	          WHERE ni.asset_id = a.id AND ni.mac_address IS NOT NULL AND ni.mac_address <> ''), '') AS mac_addresses`
 
 const assetJoins = `
 	FROM assets a
@@ -148,8 +152,10 @@ func (s *Assets) GetByID(ctx context.Context, id string) (Asset, error) {
 			(
 				SELECT host(i.address)
 				FROM ip_addresses i
-				JOIN network_interfaces ni ON ni.id = i.interface_id
+				LEFT JOIN network_interfaces ni ON ni.id = i.interface_id
 				WHERE ni.asset_id = a.id
+				   OR i.id IN (SELECT ia.ip_address_id FROM ip_assignments ia
+				               WHERE ia.asset_id = a.id AND ia.released_at IS NULL)
 				ORDER BY (i.status = 'assigned') DESC, i.address
 				LIMIT 1
 			) AS primary_ip,
@@ -196,8 +202,10 @@ func (s *Assets) List(ctx context.Context, f AssetFilter) ([]Asset, int, error) 
 			(
 				SELECT host(i.address)
 				FROM ip_addresses i
-				JOIN network_interfaces ni ON ni.id = i.interface_id
+				LEFT JOIN network_interfaces ni ON ni.id = i.interface_id
 				WHERE ni.asset_id = a.id
+				   OR i.id IN (SELECT ia.ip_address_id FROM ip_assignments ia
+				               WHERE ia.asset_id = a.id AND ia.released_at IS NULL)
 				ORDER BY (i.status = 'assigned') DESC, i.address
 				LIMIT 1
 			) AS primary_ip,
@@ -239,6 +247,7 @@ func assetScanTargets(a *Asset) []any {
 		&a.PurchaseDate, &a.PurchaseCost, &a.WarrantyExpires,
 		&a.Notes, &a.Source, &a.Metadata,
 		&a.CreatedAt, &a.UpdatedAt,
+		&a.MACAddresses,
 	}
 }
 
