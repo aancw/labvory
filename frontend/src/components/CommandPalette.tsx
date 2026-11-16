@@ -25,7 +25,7 @@ const HIT_ICON: Record<SearchHit["entity_type"], typeof BoxIcon> = {
 }
 
 // Asset hits jump straight to the detail page; other entity kinds land on their
-// module route (detail views arrive with each module's phase).
+// module route.
 const HIT_TARGET: Record<SearchHit["entity_type"], string> = {
   asset: "/assets",
   ip: "/ips",

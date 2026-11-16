@@ -14,7 +14,7 @@ export function InterfacesPage() {
     <>
       <PageHeader
         title="Network Interfaces"
-        description="Every interface across the inventory. IP assignment lands with Phase 3."
+        description="Every interface across the inventory, with MACs, IP counts, and owning assets."
       />
 
       {isError ? (

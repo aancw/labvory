@@ -1,7 +1,6 @@
 import { NavLink } from "react-router-dom"
 
 import { NAV_SECTIONS } from "@/components/nav"
-import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
 interface SidebarProps {
@@ -44,14 +43,6 @@ export function Sidebar({ onNavigate }: SidebarProps) {
                   >
                     <item.icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
                     <span className="flex-1 truncate">{item.label}</span>
-                    {item.phase ? (
-                      <Badge
-                        variant="outline"
-                        className="h-5 border-border/70 px-1.5 text-[10px] font-medium text-muted-foreground"
-                      >
-                        P{item.phase}
-                      </Badge>
-                    ) : null}
                   </NavLink>
                 </li>
               ))}

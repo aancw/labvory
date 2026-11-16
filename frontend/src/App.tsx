@@ -11,7 +11,6 @@ import { isApiError, isSessionInvalid } from "@/api/client"
 import { useMe } from "@/api/hooks"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AppShell } from "@/components/layout/Topbar"
-import { NAV_ITEMS } from "@/components/nav"
 import { Toaster } from "@/components/ui/sonner"
 import { Spinner } from "@/components/Spinner"
 import { ActivityPage } from "@/pages/ActivityPage"
@@ -28,7 +27,6 @@ import { LoginPage } from "@/pages/LoginPage"
 import { ServiceDetailPage } from "@/pages/ServiceDetailPage"
 import { ServicesPage } from "@/pages/ServicesPage"
 import { NotFoundPage } from "@/pages/NotFoundPage"
-import { PlaceholderPage } from "@/pages/PlaceholderPage"
 import { SettingsPage } from "@/pages/SettingsPage"
 import { SetupPage } from "@/pages/SetupPage"
 import { TopologyPage } from "@/pages/TopologyPage"
@@ -116,7 +114,7 @@ const router = createBrowserRouter([
       { path: "activity", element: <ActivityPage /> },
       { path: "settings", element: <SettingsPage /> },
 
-      // Phase 2: inventory.
+      // Inventory & modules.
       { path: "assets", element: <AssetListPage /> },
       { path: "assets/physical", element: <AssetListPage /> },
       { path: "assets/virtual-machines", element: <AssetListPage /> },
@@ -137,11 +135,6 @@ const router = createBrowserRouter([
       { path: "admin/locations", element: <LocationsPage /> },
       { path: "admin/tags", element: <TagsPage /> },
 
-      // Later-phase modules: honest placeholders until each phase lands.
-      ...NAV_ITEMS.filter((item) => item.phase).map((item) => ({
-        path: item.path.replace(/^\//, ""),
-        element: <PlaceholderPage path={item.path} />,
-      })),
       { path: "*", element: <NotFoundPage /> },
     ],
   },

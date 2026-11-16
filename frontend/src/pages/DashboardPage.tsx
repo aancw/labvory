@@ -122,7 +122,7 @@ export function DashboardPage() {
                 <EmptyState
                   icon={BoxesIcon}
                   title="No infrastructure registered yet"
-                  description="Asset registration ships in Phase 2. Until then, this dashboard reflects live database state — everything you see here is real."
+                  description="Register your first asset from All Assets or the Quick add menu — this dashboard reflects live database state."
                 />
               ) : (
                 <div className="flex flex-wrap gap-x-8 gap-y-3">

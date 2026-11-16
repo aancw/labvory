@@ -25,8 +25,6 @@ export interface NavItem {
   label: string
   path: string
   icon: LucideIcon
-  /** Phase when this module ships; undefined for Phase 1 features. */
-  phase?: number
 }
 
 export interface NavSection {
@@ -34,8 +32,7 @@ export interface NavSection {
   items: NavItem[]
 }
 
-// Navigation mirrors the spec's sidebar layout. Items without `phase` are live;
-// the rest render honest phase placeholders until their phase lands.
+// Navigation mirrors the spec's sidebar layout; every item is a live module.
 export const NAV_SECTIONS: NavSection[] = [
   {
     heading: "Overview",

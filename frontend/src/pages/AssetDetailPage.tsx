@@ -342,7 +342,7 @@ function InterfacesPanel({ assetId, interfaces }: { assetId: string; interfaces:
           <EmptyState
             icon={WaypointsIcon}
             title="No interfaces"
-            description="Add interfaces to record MACs and prepare IP assignments (Phase 3)."
+            description="Add interfaces to record MACs and attach IP addresses."
             className="border-0 bg-transparent py-6"
           />
         ) : (
@@ -372,7 +372,7 @@ function InterfacesPanel({ assetId, interfaces }: { assetId: string; interfaces:
                           </Button>
                         }
                         title={`Delete ${ni.name}?`}
-                        description="Assigned IP rows are kept but detached (full IP management arrives in Phase 3)."
+                        description="Assigned IP rows are kept but detached from this interface."
                         confirmLabel="Delete interface"
                         onConfirm={() =>
                           deleteInterface.mutate(ni.id, {
