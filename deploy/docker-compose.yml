@@ -1,0 +1,63 @@
+# Lanvory — reproducible self-hosted deployment.
+# Copy .env.example to .env and review values before first start.
+name: lanvory
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${LV_DB_USER:-lanvory}
+      POSTGRES_PASSWORD: ${LV_DB_PASSWORD:-lanvory}
+      POSTGRES_DB: ${LV_DB_NAME:-lanvory}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LV_DB_USER:-lanvory} -d ${LV_DB_NAME:-lanvory}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    # Not exposed to the host: reachable only inside the compose network.
+
+  backend:
+    build: ../backend
+    restart: unless-stopped
+    # NET_RAW lets the ICMP reachability checks ping and lets arp-scan use raw
+    # sockets. Scanning the LAN itself additionally needs network_mode: host.
+    cap_add:
+      - NET_RAW
+    environment:
+      LV_DATABASE_URL: postgres://${LV_DB_USER:-lanvory}:${LV_DB_PASSWORD:-lanvory}@db:5432/${LV_DB_NAME:-lanvory}?sslmode=disable
+      LV_ADDR: "0.0.0.0:8080"
+      LV_ENV: production
+      LV_COOKIE_SECURE: ${LV_COOKIE_SECURE:-false}
+      # Integration secret encryption (required for Proxmox token storage).
+      LV_SECRET_KEY: ${LV_SECRET_KEY:-}
+      # Optional demo seed: "dev" populates an EMPTY inventory only.
+      LV_SEED_MODE: ${LV_SEED_MODE:-}
+    ports:
+      # Direct API access for remote clients/scripts (authenticated + CSRF protected).
+      # Set LV_API_PORT to change the port.
+      - "0.0.0.0:${LV_API_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  frontend:
+    build: ../frontend
+    restart: unless-stopped
+    ports:
+      # Explicit 0.0.0.0 binding: reachable from other machines on the network.
+      - "0.0.0.0:${LV_HTTP_PORT:-8088}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  pgdata:

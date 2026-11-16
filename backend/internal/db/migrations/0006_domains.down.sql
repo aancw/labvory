@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS subdomains;
+DROP TABLE IF EXISTS domains;

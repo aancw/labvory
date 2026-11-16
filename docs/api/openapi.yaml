@@ -1,0 +1,179 @@
+openapi: 3.1.0
+info:
+  title: Lanvory API
+  version: 1.0.0
+  description: |
+    REST API for the Lanvory homelab infrastructure manager (all six phases).
+
+    Auth uses an HttpOnly session cookie (`lv_session`). All unsafe methods require the
+    double-submit CSRF header `X-CSRF-Token` matching the `lv_csrf` cookie (GET /api/v1/csrf).
+    Errors: `{ "error": { "code", "message", "details? } }`. Every mutation is audited.
+servers:
+  - url: http://localhost:8088
+  - url: http://localhost:8080
+tags:
+  - { name: system }
+  - { name: setup }
+  - { name: auth }
+  - { name: assets }
+  - { name: ipam }
+  - { name: services }
+  - { name: topology }
+  - { name: import-export }
+  - { name: integrations }
+  - { name: dns }
+paths:
+  /healthz: { get: { tags: [system], summary: "Liveness: process + database", responses: { "200": { description: OK }, "503": { description: Unhealthy } } } }
+  /api/v1/csrf: { get: { tags: [auth], summary: "Obtain CSRF token", responses: { "200": { description: OK } } } }
+  /api/v1/setup/status: { get: { tags: [setup], summary: "First-run status", responses: { "200": { description: OK } } } }
+  /api/v1/setup/admin:
+    post:
+      tags: [setup]
+      summary: "Create first administrator (setup closes after)"
+      responses: { "201": { description: Created }, "403": { description: Closed }, "409": { description: Taken }, "422": { description: Invalid }, "429": { description: Rate limited } }
+  /api/v1/auth/login: { post: { tags: [auth], summary: Login, responses: { "200": { description: OK }, "401": { description: Invalid }, "429": { description: Rate limited } } } }
+  /api/v1/auth/logout: { post: { tags: [auth], summary: Logout, responses: { "200": { description: OK } } } }
+  /api/v1/auth/me: { get: { tags: [auth], summary: "Current user", responses: { "200": { description: OK }, "401": { description: Unauthenticated } } } }
+  /api/v1/auth/change-password: { post: { tags: [auth], summary: "Rotate password (revokes other sessions)", responses: { "200": { description: OK }, "403": { description: Wrong password } } } }
+  /api/v1/settings: { get: { tags: [system], summary: "Instance settings", responses: { "200": { description: OK } } }, put: { tags: [system], summary: "Update whitelisted settings", responses: { "200": { description: OK }, "422": { description: Invalid } } } }
+  /api/v1/dashboard: { get: { tags: [system], summary: "Dashboard aggregates incl. alerts, OS/host/subnet breakdowns", responses: { "200": { description: OK } } } }
+  /api/v1/activity:
+    get:
+      tags: [system]
+      summary: "Audit events (filters: entity_type, action; paginated)"
+      parameters:
+        - { name: entity_type, in: query, schema: { type: string } }
+        - { name: action, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses: { "200": { description: OK } }
+  /api/v1/search:
+    get:
+      tags: [system]
+      summary: "Global search (assets, IPs, MACs, serials, subnets, VLANs, services)"
+      parameters: [{ name: q, in: query, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK } }
+  /api/v1/asset-types: { get: { tags: [assets], summary: "Device type catalogue", responses: { "200": { description: OK } } } }
+  /api/v1/assets:
+    get:
+      tags: [assets]
+      summary: "Inventory list (server-side sort/filter/pagination)"
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: category, in: query, schema: { type: string, enum: [physical, virtual] } }
+        - { name: type_slugs, in: query, schema: { type: string }, description: comma-separated }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: environment, in: query, schema: { type: string } }
+        - { name: location_id, in: query, schema: { type: string } }
+        - { name: parent_id, in: query, schema: { type: string } }
+        - { name: sort, in: query, schema: { type: string, enum: [updated_at, created_at, name, status, hostname] } }
+        - { name: order, in: query, schema: { type: string, enum: [asc, desc] } }
+      responses: { "200": { description: OK } }
+    post: { tags: [assets], summary: "Register asset", responses: { "201": { description: Created }, "422": { description: Invalid } } }
+  /api/v1/assets/bulk:
+    post:
+      tags: [assets]
+      summary: "Bulk delete / set_status / set_environment (atomic; child-hosted assets block delete)"
+      responses: { "200": { description: OK }, "409": { description: Has children } }
+  /api/v1/assets/{assetID}:
+    get: { tags: [assets], summary: "Full detail (interfaces, relationships, children, activity)", responses: { "200": { description: OK }, "404": { description: Missing } } }
+    put: { tags: [assets], summary: "Update (metadata/source preserved; changes audited)", responses: { "200": { description: OK } } }
+    delete: { tags: [assets], summary: "Delete (409 while hosting children)", responses: { "200": { description: OK }, "409": { description: Has children } } }
+  /api/v1/assets/{assetID}/interfaces: { post: { tags: [assets], summary: "Add interface", responses: { "201": { description: Created }, "409": { description: Duplicate name } } } }
+  /api/v1/assets/{assetID}/relationships:
+    post:
+      tags: [assets]
+      summary: "Create relationship (runs_on/connected_to/depends_on; cycles and self-links rejected; ports/interfaces optional)"
+      responses: { "201": { description: Created }, "409": { description: Duplicate or cycle }, "422": { description: Invalid } }
+  /api/v1/interfaces: { get: { tags: [assets], summary: "Global interface list", responses: { "200": { description: OK } } } }
+  /api/v1/interfaces/{interfaceID}: { put: { tags: [assets], summary: Update interface, responses: { "200": { description: OK } } }, delete: { tags: [assets], summary: Delete interface, responses: { "200": { description: OK } } } }
+  /api/v1/relationships/{relationshipID}:
+    patch: { tags: [topology], summary: "Edit note + connection metadata", responses: { "200": { description: OK } } }
+    delete: { tags: [assets], summary: Delete relationship, responses: { "200": { description: OK } } }
+  /api/v1/locations: { get: { tags: [assets], summary: "Locations (tree + counts)", responses: { "200": { description: OK } } }, post: { tags: [assets], summary: "Create location", responses: { "201": { description: Created }, "409": { description: Duplicate } } } }
+  /api/v1/locations/{locationID}: { put: { tags: [assets], summary: "Update (cycles rejected)", responses: { "200": { description: OK }, "409": { description: Cycle } } }, delete: { tags: [assets], summary: "Delete (blocked with children/assets)", responses: { "200": { description: OK }, "409": { description: Has dependents } } } }
+  /api/v1/tags: { get: { tags: [assets], summary: "Tags + usage", responses: { "200": { description: OK } } }, post: { tags: [assets], summary: Create tag, responses: { "201": { description: Created } } } }
+  /api/v1/tags/{tagID}: { put: { tags: [assets], summary: Update tag, responses: { "200": { description: OK } } }, delete: { tags: [assets], summary: "Delete tag (detaches everywhere)", responses: { "200": { description: OK } } } }
+  /api/v1/network-contexts: { get: { tags: [ipam], summary: "Contexts (VRF-style)", responses: { "200": { description: OK } } }, post: { tags: [ipam], summary: Create context, responses: { "201": { description: Created } } } }
+  /api/v1/vlans: { get: { tags: [ipam], summary: "VLANs per context", responses: { "200": { description: OK } } }, post: { tags: [ipam], summary: "Create VLAN (unique per context)", responses: { "201": { description: Created }, "409": { description: Duplicate } } } }
+  /api/v1/vlans/{vlanID}: { put: { tags: [ipam], summary: Update VLAN, responses: { "200": { description: OK } } }, delete: { tags: [ipam], summary: Delete VLAN, responses: { "200": { description: OK } } } }
+  /api/v1/subnets:
+    get: { tags: [ipam], summary: "Subnets with live utilization", responses: { "200": { description: OK } } }
+    post:
+      tags: [ipam]
+      summary: "Create subnet (overlap rejected per context; network/broadcast/gateway validated; /31 /32 per RFC 3021)"
+      responses: { "201": { description: Created }, "409": { description: Overlap or duplicate }, "422": { description: Invalid } }
+  /api/v1/subnets/{subnetID}:
+    get: { tags: [ipam], summary: "Detail + allocations + history", responses: { "200": { description: OK } } }
+    put: { tags: [ipam], summary: Update subnet, responses: { "200": { description: OK } } }
+    delete: { tags: [ipam], summary: "Delete (blocked while real allocations exist)", responses: { "200": { description: OK }, "409": { description: Has allocations } } }
+  /api/v1/subnets/{subnetID}/grid: { get: { tags: [ipam], summary: "Address grid (≤4096 usable; free/assigned/reserved/excluded/conflict + next-available)", responses: { "200": { description: OK } } } }
+  /api/v1/subnets/{subnetID}/next-available: { get: { tags: [ipam], summary: "Next N free addresses", responses: { "200": { description: OK } } } }
+  /api/v1/subnets/{subnetID}/addresses:
+    post:
+      tags: [ipam]
+      summary: "Allocate (auto-assigns next available when address omitted; 409 on active duplicate)"
+      responses: { "201": { description: Created }, "409": { description: Taken or exhausted } }
+  /api/v1/subnets/{subnetID}/addresses/bulk:
+    post:
+      tags: [ipam]
+      summary: "Bulk reserve / exclude / release a contiguous range"
+      responses: { "200": { description: OK }, "422": { description: Invalid range } }
+  /api/v1/ip-addresses:
+    get: { tags: [ipam], summary: "Global tracked addresses (status/q filters)", responses: { "200": { description: OK } } }
+  /api/v1/ip-addresses/{ipID}:
+    put: { tags: [ipam], summary: "Update (status transitions maintain assignment history)", responses: { "200": { description: OK } } }
+    delete: { tags: [ipam], summary: "Release + remove tracking", responses: { "200": { description: OK } } }
+  /api/v1/ip-addresses/{ipID}/release: { post: { tags: [ipam], summary: "Release to available (closes history row)", responses: { "200": { description: OK } } } }
+  /api/v1/ip-addresses/{ipID}/history: { get: { tags: [ipam], summary: "Assignment history", responses: { "200": { description: OK } } } }
+  /api/v1/services: { get: { tags: [services], summary: "Service list", responses: { "200": { description: OK } } }, post: { tags: [services], summary: "Register service", responses: { "201": { description: Created }, "409": { description: Duplicate } } } }
+  /api/v1/services/{serviceID}:
+    get: { tags: [services], summary: "Detail + endpoints + deployments + activity", responses: { "200": { description: OK } } }
+    put: { tags: [services], summary: Update service, responses: { "200": { description: OK } } }
+    delete: { tags: [services], summary: Delete service, responses: { "200": { description: OK } } }
+  /api/v1/services/{serviceID}/endpoints: { post: { tags: [services], summary: Add endpoint, responses: { "201": { description: Created } } } }
+  /api/v1/services/{serviceID}/deployments: { post: { tags: [services], summary: "Map to host (unique per host)", responses: { "201": { description: Created }, "409": { description: Duplicate } } } }
+  /api/v1/service-endpoints/{endpointID}: { delete: { tags: [services], summary: Remove endpoint, responses: { "200": { description: OK } } } }
+  /api/v1/service-deployments/{deploymentID}: { delete: { tags: [services], summary: Unmap host, responses: { "200": { description: OK } } } }
+  /api/v1/topology: { get: { tags: [topology], summary: "Asset graph: nodes + explicit edges (hosts, relationships w/ ports). Physical links are never inferred.", responses: { "200": { description: OK } } } }
+  /api/v1/export/inventory.json: { get: { tags: [import-export], summary: "Full inventory export (stable natural keys)", responses: { "200": { description: OK } } } }
+  /api/v1/import/preview: { post: { tags: [import-export], summary: "Validate rows (assets|subnets|ip_addresses) without writing", responses: { "200": { description: OK } } } }
+  /api/v1/import/commit: { post: { tags: [import-export], summary: "Transactional import; duplicates skipped, never overwritten", responses: { "200": { description: OK }, "422": { description: Rows failed } } } }
+  /api/v1/import/restore: { post: { tags: [import-export], summary: "Idempotent restore of an exported inventory", responses: { "200": { description: OK }, "422": { description: Failed } } } }
+  /api/v1/integrations:
+    get: { tags: [integrations], summary: "List (secrets redacted; secrets_ready flag)", responses: { "200": { description: OK } } }
+    post: { tags: [integrations], summary: "Create connector (secrets encrypted AES-256-GCM)", responses: { "201": { description: Created }, "422": { description: "Secrets unavailable / invalid" } } }
+  /api/v1/integrations/{integrationID}:
+    put: { tags: [integrations], summary: Update, responses: { "200": { description: OK } } }
+    delete: { tags: [integrations], summary: Delete, responses: { "200": { description: OK } } }
+    post: { tags: [integrations], summary: "Run sync now (Proxmox/Docker/ICMP; observed state only)", responses: { "200": { description: OK }, "422": { description: "Sync failed" } } }
+  /api/v1/integrations/{integrationID}/sync-runs: { get: { tags: [integrations], summary: "Sync history", responses: { "200": { description: OK } } } }
+
+  /api/v1/domains:
+    get: { tags: [dns], summary: "List domains (zones) with record counts", responses: { "200": { description: OK } } }
+    post: { tags: [dns], summary: "Create domain", responses: { "201": { description: Created }, "409": { description: Duplicate }, "422": { description: Invalid } } }
+  /api/v1/domains/{domainID}:
+    get: { tags: [dns], summary: "Domain detail with subdomain records", responses: { "200": { description: OK }, "404": { description: Not found } } }
+    put: { tags: [dns], summary: Update, responses: { "200": { description: OK } } }
+    delete: { tags: [dns], summary: "Delete domain and its records", responses: { "200": { description: OK } } }
+  /api/v1/domains/{domainID}/subdomains: { post: { tags: [dns], summary: "Add record (label '' = apex; A/AAAA/CNAME/MX/TXT/SRV/CAA/NS)", responses: { "201": { description: Created }, "409": { description: Duplicate }, "422": { description: Invalid } } } }
+  /api/v1/domains/{domainID}/resolve: { post: { tags: [dns], summary: "Resolve every record; stores observed values and reports drift", responses: { "200": { description: OK } } } }
+  /api/v1/subdomains/{subdomainID}:
+    put: { tags: [dns], summary: Update record, responses: { "200": { description: OK } } }
+    delete: { tags: [dns], summary: Delete record, responses: { "200": { description: OK } } }
+  /api/v1/subdomains/{subdomainID}/resolve: { post: { tags: [dns], summary: "Resolve one record via DNS; returns {subdomain, drift, error?}", responses: { "200": { description: OK } } } }
+
+  /api/v1/tokens:
+    get: { tags: [auth], summary: "List API tokens (purpose-scoped: mcp|api; hashed, plaintext never returned)", responses: { "200": { description: OK } } }
+    post: { tags: [auth], summary: "Create API token (purpose: mcp for /mcp, api for REST bearer; plaintext shown once)", responses: { "201": { description: Created }, "422": { description: "Invalid name/purpose" } } }
+  /api/v1/tokens/{tokenID}: { delete: { tags: [auth], summary: Revoke, responses: { "200": { description: OK }, "404": { description: "Not found" } } } }
+
+  /mcp:
+    post: { tags: [system], summary: "MCP streamable-HTTP endpoint (JSON-RPC; Bearer token auth; tools for asset/IPAM/service management — see docs/MCP.md)", responses: { "200": { description: OK }, "401": { description: "Missing or invalid token" } } }
+components:
+  securitySchemes:
+    sessionCookie: { type: apiKey, in: cookie, name: lv_session }
+    # Bearer API tokens (machine clients / MCP agents): create via POST /tokens.
+    bearerToken: { type: http, scheme: bearer }
+security:
+  - sessionCookie: []

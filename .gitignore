@@ -1,0 +1,19 @@
+# Frontend
+node_modules/
+frontend/dist/
+
+# Builds
+backend/lanvory
+lanvory-server
+*.log
+
+# Environment
+.env
+deploy/.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Agent workspace
+.zcode/

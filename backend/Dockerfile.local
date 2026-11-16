@@ -1,0 +1,8 @@
+# Runtime-only image for environments where the registry is unreachable:
+# build artifacts on the host, then assemble. Used via docker-compose.local.yml.
+FROM golang:1.27-alpine
+RUN apk add --no-cache ca-certificates && adduser -D -H -u 10001 lanvory
+COPY lanvory-linux /usr/local/bin/lanvory
+USER lanvory
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/lanvory"]
