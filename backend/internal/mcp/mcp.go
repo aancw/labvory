@@ -109,7 +109,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"protocolVersion": version,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
 			"serverInfo":      map[string]any{"name": h.ServerName, "version": h.Version},
-			"instructions":    "Manage homelab inventory: assets, locations, IPAM (subnets/IPs/VLANs/network contexts), services and interfaces. Destructive actions are real — confirm with the user before deleting.",
+			"instructions":    "Manage homelab inventory: assets, locations, IPAM (subnets/IPs/VLANs/network contexts), services, interfaces and the DNS inventory (domains and records). Destructive actions are real — confirm with the user before deleting.",
 		}})
 	case "ping":
 		writeRPC(w, jsonRPCResponse{JSONRPC: "2.0", ID: req.ID, Result: map[string]any{}})

@@ -3,7 +3,8 @@
 Lanvory ships a Model Context Protocol (MCP) server at `/mcp` (streamable HTTP
 transport, stateless mode) so agents and scripts can create, list and manage
 inventory data: assets, locations, subnets, IP allocations, VLANs, network
-contexts, services, interfaces and relationships.
+contexts, services, interfaces, relationships and the DNS inventory (domains
+and records).
 
 Authentication uses **API tokens** (DB-backed, revocable). Tokens never
 expire; revoke them instead.
@@ -44,7 +45,9 @@ curl -H "Authorization: Bearer lv_..." http://localhost:8090/api/v1/assets
 
 Any MCP client speaking streamable HTTP works. Configure:
 
-- **URL**: `http://<host>:<port>/mcp`
+- **URL**: `http://<host>:<port>/mcp` — dev (`make dev`) serves it on `:8090`; in
+  Docker Compose both the web UI (`:8088`, proxied by nginx) and the API port
+  (`:8080`) expose it.
 - **Auth header**: `Authorization: Bearer lv_...`
 
 Example for clients that accept raw config (e.g. `mcp-remote`-style bridges or
