@@ -17,7 +17,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/petruknisme/lanvory/internal/store"
+	"github.com/aancw/lanvory/internal/store"
 )
 
 // SyncARP reads Layer-2 neighbors (ip ↔ mac) and records them as observations.

@@ -14,7 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/petruknisme/lanvory/internal/store"
+	"github.com/aancw/lanvory/internal/store"
 )
 
 // SyncAdGuard imports the AdGuard Home persistent client list and DNS rewrites.

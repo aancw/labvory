@@ -14,8 +14,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/petruknisme/lanvory/internal/dnsx"
-	"github.com/petruknisme/lanvory/internal/store"
+	"github.com/aancw/lanvory/internal/dnsx"
+	"github.com/aancw/lanvory/internal/store"
 )
 
 // SyncDNS enumerates a domain's records and stores them as observed subdomains.

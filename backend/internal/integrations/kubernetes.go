@@ -17,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"gopkg.in/yaml.v3"
 
-	"github.com/petruknisme/lanvory/internal/store"
+	"github.com/aancw/lanvory/internal/store"
 )
 
 // kubeConfig is the connector configuration.

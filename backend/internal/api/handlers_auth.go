@@ -4,9 +4,9 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/petruknisme/lanvory/internal/auth"
-	"github.com/petruknisme/lanvory/internal/httpx"
-	"github.com/petruknisme/lanvory/internal/store"
+	"github.com/aancw/lanvory/internal/auth"
+	"github.com/aancw/lanvory/internal/httpx"
+	"github.com/aancw/lanvory/internal/store"
 )
 
 type setupStatusResponse struct {

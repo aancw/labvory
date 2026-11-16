@@ -9,8 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/petruknisme/lanvory/internal/secrets"
-	"github.com/petruknisme/lanvory/internal/store"
+	"github.com/aancw/lanvory/internal/secrets"
+	"github.com/aancw/lanvory/internal/store"
 )
 
 // Runner executes integration syncs and records their history.

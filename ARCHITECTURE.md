@@ -36,7 +36,7 @@ stateful dependency. No message queue, no cache tier, no external SaaS.
 
 ```
 lanvory/
-├── backend/                  Go API (module github.com/petruknisme/lanvory)
+├── backend/                  Go API (module github.com/aancw/lanvory)
 │   ├── cmd/server/           entrypoint
 │   ├── internal/
 │   │   ├── api/              chi routes + HTTP handlers (transport layer)
@@ -312,7 +312,7 @@ erDiagram
 
 ## 3. Backend design
 
-- **Go 1.27**, module `github.com/petruknisme/lanvory`.
+- **Go 1.27**, module `github.com/aancw/lanvory`.
 - **chi** router; layered: `api` (transport) → `auth`/`audit`/future services → `store` (SQL).
 - **pgx v5** with `pgxpool`; statements are always parameterized.
 - **golang-migrate** with migrations embedded from `internal/db/migrations/*.sql`.

@@ -12,8 +12,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/petruknisme/lanvory/internal/mcp"
-	"github.com/petruknisme/lanvory/internal/store"
+	"github.com/aancw/lanvory/internal/mcp"
+	"github.com/aancw/lanvory/internal/store"
 )
 
 // MCP tool surface. Tools reuse the existing REST handlers in-process: each

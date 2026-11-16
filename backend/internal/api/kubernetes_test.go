@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/petruknisme/lanvory/internal/integrations"
-	"github.com/petruknisme/lanvory/internal/store"
+	"github.com/aancw/lanvory/internal/integrations"
+	"github.com/aancw/lanvory/internal/store"
 )
 
 // TestKubernetesSync runs the connector against a fake Kubernetes API:

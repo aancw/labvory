@@ -10,9 +10,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/petruknisme/lanvory/internal/httpx"
-	"github.com/petruknisme/lanvory/internal/ipam"
-	"github.com/petruknisme/lanvory/internal/store"
+	"github.com/aancw/lanvory/internal/httpx"
+	"github.com/aancw/lanvory/internal/ipam"
+	"github.com/aancw/lanvory/internal/store"
 )
 
 const gridMaxAddresses = 4096 // beyond this, clients use the paginated table

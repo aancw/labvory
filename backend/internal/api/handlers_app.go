@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/petruknisme/lanvory/internal/httpx"
-	"github.com/petruknisme/lanvory/internal/store"
+	"github.com/aancw/lanvory/internal/httpx"
+	"github.com/aancw/lanvory/internal/store"
 )
 
 // ---------- Settings ----------

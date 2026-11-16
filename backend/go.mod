@@ -1,4 +1,4 @@
-module github.com/petruknisme/lanvory
+module github.com/aancw/lanvory
 
 go 1.27
 

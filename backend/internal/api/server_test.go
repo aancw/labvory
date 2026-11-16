@@ -15,10 +15,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/petruknisme/lanvory/internal/auth"
-	"github.com/petruknisme/lanvory/internal/config"
-	"github.com/petruknisme/lanvory/internal/db"
-	"github.com/petruknisme/lanvory/internal/store"
+	"github.com/aancw/lanvory/internal/auth"
+	"github.com/aancw/lanvory/internal/config"
+	"github.com/aancw/lanvory/internal/db"
+	"github.com/aancw/lanvory/internal/store"
 )
 
 func testLogger() *slog.Logger {

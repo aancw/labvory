@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/petruknisme/lanvory/internal/store"
+	"github.com/aancw/lanvory/internal/store"
 )
 
 var (

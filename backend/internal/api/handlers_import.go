@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/petruknisme/lanvory/internal/httpx"
+	"github.com/aancw/lanvory/internal/httpx"
 )
 
 // ---------- export ----------

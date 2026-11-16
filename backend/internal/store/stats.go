@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/petruknisme/lanvory/internal/ipam"
+	"github.com/aancw/lanvory/internal/ipam"
 )
 
 // AssetSummary aggregates inventory counts for the dashboard.
