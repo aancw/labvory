@@ -176,6 +176,7 @@ func (s *Server) Routes() http.Handler {
 func (s *Server) mountDataRoutes(r chi.Router) {
 	r.Get("/settings", s.handleGetSettings)
 	r.Put("/settings", s.handleUpdateSettings)
+	r.Post("/settings/notify-test", s.handleTestNotification)
 	r.Get("/dashboard", s.handleDashboard)
 	r.Get("/activity", s.handleActivity)
 	r.Get("/search", s.handleSearch)

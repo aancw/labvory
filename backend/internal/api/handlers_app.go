@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/aancw/lanvory/internal/httpx"
+	"github.com/aancw/lanvory/internal/notify"
 	"github.com/aancw/lanvory/internal/store"
 )
 
@@ -13,8 +15,58 @@ import (
 
 // settingsSchema defines the writable settings whitelist and validation per key.
 var settingsSchema = map[string]func(v json.RawMessage) (json.RawMessage, string){
-	"instance.name": validateStringSetting(1, 64),
-	"theme.default": validateStringSetting(0, 16),
+	"instance.name":             validateStringSetting(1, 64),
+	"theme.default":             validateStringSetting(0, 16),
+	"notifications.webhook_url": validateWebhookURL,
+}
+
+// validateWebhookURL accepts an empty string (notifications off) or an
+// http(s) URL of at most 500 characters.
+func validateWebhookURL(v json.RawMessage) (json.RawMessage, string) {
+	var s string
+	if err := json.Unmarshal(v, &s); err != nil {
+		return nil, "must be a string"
+	}
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return json.RawMessage(`""`), ""
+	}
+	if len(s) > 500 {
+		return nil, "URL too long"
+	}
+	if !strings.HasPrefix(s, "http://") && !strings.HasPrefix(s, "https://") {
+		return nil, "must be an http(s) URL"
+	}
+	return json.RawMessage(mustMarshal(s)), ""
+}
+
+// handleTestNotification sends a sample payload to the configured webhook so
+// the operator can confirm delivery before relying on it.
+func (s *Server) handleTestNotification(w http.ResponseWriter, r *http.Request) {
+	all, err := s.settings.All(r.Context())
+	if err != nil {
+		s.logger.Error("notify test: load settings failed", "error", err)
+		httpx.Error(w, r, http.StatusInternalServerError, "internal", "Could not load settings.", nil)
+		return
+	}
+	raw := all["notifications.webhook_url"]
+	var url string
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &url)
+	}
+	if strings.TrimSpace(url) == "" {
+		httpx.Error(w, r, http.StatusUnprocessableEntity, "no_webhook",
+			"No webhook URL configured — set it first.", nil)
+		return
+	}
+	if err := notify.Post(r.Context(), url, "Lanvory test notification",
+		"If you can read this, webhook notifications from Lanvory are working."); err != nil {
+		httpx.Error(w, r, http.StatusBadGateway, "webhook_failed",
+			"Webhook delivery failed: "+err.Error(), nil)
+		return
+	}
+	s.auditChange(r, currentUser(r), "settings", "", "notifications", "notified_test", nil)
+	httpx.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func validateStringSetting(minLen, maxLen int) func(json.RawMessage) (json.RawMessage, string) {

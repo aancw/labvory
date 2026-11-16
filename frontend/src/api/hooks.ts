@@ -122,6 +122,12 @@ export function useSettings() {
   })
 }
 
+export function useTestNotification() {
+  return useMutation({
+    mutationFn: () => api.post<{ ok: boolean }>("/api/v1/settings/notify-test"),
+  })
+}
+
 export function useUpdateSettings() {
   const qc = useQueryClient()
   return useMutation({

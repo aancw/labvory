@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { z } from "zod"
 
 import { isApiError } from "@/api/client"
-import { useApiTokens, useChangePassword, useCreateApiToken, useMe, useRevokeApiToken, useSettings, useUpdateSettings } from "@/api/hooks"
+import { useApiTokens, useChangePassword, useCreateApiToken, useMe, useRevokeApiToken, useSettings, useTestNotification, useUpdateSettings } from "@/api/hooks"
 import type { ApiToken, ApiTokenCreated } from "@/api/types"
 import { PageHeader } from "@/components/PageHeader"
 import { useTheme } from "@/components/theme-provider"
@@ -40,6 +40,7 @@ export function SettingsPage() {
       />
       <div className="grid gap-4 lg:grid-cols-2">
         <InstanceCard />
+        <NotificationsCard />
         <AppearanceCard />
         <SecurityCard />
         <AccountCard username={user?.username ?? ""} role={user?.role ?? ""} />
@@ -100,6 +101,83 @@ function InstanceCard() {
             <Button type="submit" size="sm" disabled={updateSettings.isPending}>
               {updateSettings.isPending ? "Saving…" : "Save changes"}
             </Button>
+          </form>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function NotificationsCard() {
+  const { data, isLoading } = useSettings()
+  const updateSettings = useUpdateSettings()
+  const test = useTestNotification()
+  const [webhookURL, setWebhookURL] = useState("")
+
+  useEffect(() => {
+    const value = data?.settings["notifications.webhook_url"]
+    if (typeof value === "string") setWebhookURL(value)
+  }, [data])
+
+  const save = () => {
+    updateSettings.mutate(
+      { settings: { "notifications.webhook_url": webhookURL.trim() } },
+      {
+        onSuccess: () => toast.success("Notification settings saved."),
+        onError: (err) => toast.error(isApiError(err) ? err.message : "Could not save settings."),
+      },
+    )
+  }
+
+  const sendTest = () => {
+    test.mutate(undefined, {
+      onSuccess: () => toast.success("Test notification sent — check your webhook receiver."),
+      onError: (err) => toast.error(isApiError(err) ? err.message : "Test delivery failed."),
+    })
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Notifications</CardTitle>
+        <CardDescription>
+          Push alerts to a webhook when a service goes down or recovers and when a scheduled sync
+          fails. Works with ntfy out of the box (ntfy.sh/&lt;topic&gt;); anything accepting a POST works too.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-9 w-full" />
+        ) : (
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault()
+              save()
+            }}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="notify-webhook">Webhook URL</Label>
+              <Input
+                id="notify-webhook"
+                className="font-mono text-xs"
+                placeholder="https://ntfy.sh/your-secret-topic"
+                maxLength={500}
+                value={webhookURL}
+                onChange={(e) => setWebhookURL(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Sent as a POST with the message body and an <span className="font-mono">X-Title</span> header. Empty disables notifications.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" size="sm" disabled={updateSettings.isPending}>
+                {updateSettings.isPending ? "Saving…" : "Save changes"}
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={sendTest} disabled={test.isPending}>
+                {test.isPending ? "Sending…" : "Send test"}
+              </Button>
+            </div>
           </form>
         )}
       </CardContent>

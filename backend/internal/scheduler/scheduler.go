@@ -7,6 +7,7 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/aancw/lanvory/internal/integrations"
+	"github.com/aancw/lanvory/internal/notify"
 	"github.com/aancw/lanvory/internal/store"
 )
 
@@ -29,6 +31,7 @@ type Scheduler struct {
 	pool         *pgxpool.Pool
 	integrations *store.Integrations
 	services     *store.Services
+	settings     *store.Settings
 	audit        *store.AuditEvents
 	runner       *integrations.Runner
 	logger       *slog.Logger
@@ -39,6 +42,7 @@ func New(pool *pgxpool.Pool, runner *integrations.Runner, logger *slog.Logger) *
 		pool:         pool,
 		integrations: store.NewIntegrations(pool),
 		services:     store.NewServices(pool),
+		settings:     store.NewSettings(pool),
 		audit:        store.NewAuditEvents(pool),
 		runner:       runner,
 		logger:       logger,
@@ -61,14 +65,45 @@ func (s *Scheduler) Run(ctx context.Context) {
 }
 
 func (s *Scheduler) tick(ctx context.Context) {
-	s.syncDueIntegrations(ctx)
-	s.checkDueEndpoints(ctx)
+	hook := s.webhookURL(ctx)
+	s.syncDueIntegrations(ctx, hook)
+	s.checkDueEndpoints(ctx, hook)
+}
+
+// webhookURL reads the notification webhook from settings once per tick.
+// Empty string = notifications disabled.
+func (s *Scheduler) webhookURL(ctx context.Context) string {
+	all, err := s.settings.All(ctx)
+	if err != nil {
+		s.logger.Error("scheduler: load settings failed", "error", err)
+		return ""
+	}
+	raw := all["notifications.webhook_url"]
+	if len(raw) == 0 {
+		return ""
+	}
+	var url string
+	if json.Unmarshal(raw, &url) != nil {
+		return ""
+	}
+	return url
+}
+
+// notify delivers one webhook message; delivery problems are logged and
+// never interrupt the tick.
+func (s *Scheduler) notify(ctx context.Context, url, title, message string) {
+	if url == "" {
+		return
+	}
+	if err := notify.Post(context.WithoutCancel(ctx), url, title, message); err != nil {
+		s.logger.Warn("scheduler: webhook delivery failed", "error", err, "title", title)
+	}
 }
 
 // checkDueEndpoints probes every service endpoint with health checks enabled
 // and records the observed result. Up↔down transitions are audited so the
 // Activity page shows when a service flapped.
-func (s *Scheduler) checkDueEndpoints(ctx context.Context) {
+func (s *Scheduler) checkDueEndpoints(ctx context.Context, hook string) {
 	endpoints, err := s.services.DueHealthEndpoints(ctx, healthCheckEvery)
 	if err != nil {
 		s.logger.Error("scheduler: list due health endpoints failed", "error", err)
@@ -88,11 +123,19 @@ func (s *Scheduler) checkDueEndpoints(ctx context.Context) {
 			action, detail := "health_down", map[string]any{
 				"url": ep.URL, "status": status, "error": errText,
 			}
+			title, message := ep.ServiceName+" is down", ep.URL
+			if errText != "" {
+				message = ep.URL + " — " + errText
+			} else {
+				message = fmt.Sprintf("%s — HTTP %d", ep.URL, status)
+			}
 			if isUp {
 				action = "health_recovered"
 				detail = map[string]any{"url": ep.URL, "status": status, "latency_ms": latency}
+				title, message = ep.ServiceName+" recovered", fmt.Sprintf("%s is answering again (HTTP %d, %d ms).", ep.URL, status, latency)
 			}
 			s.recordAudit(book, "service_endpoint", ep.ID, ep.ServiceName+" · "+ep.Label, action, detail)
+			s.notify(book, hook, title, message)
 		}
 	}
 }
@@ -125,7 +168,7 @@ func probeHTTP(ctx context.Context, client *http.Client, url string) (statusCode
 
 // syncDueIntegrations runs every enabled integration whose auto-sync interval
 // has elapsed. Runner.Run records the run history and last_sync_at itself.
-func (s *Scheduler) syncDueIntegrations(ctx context.Context) {
+func (s *Scheduler) syncDueIntegrations(ctx context.Context, hook string) {
 	items, err := s.integrations.ListScheduled(ctx)
 	if err != nil {
 		s.logger.Error("scheduler: list scheduled integrations failed", "error", err)
@@ -142,6 +185,7 @@ func (s *Scheduler) syncDueIntegrations(ctx context.Context) {
 			s.logger.Warn("scheduled sync failed", "integration", integ.Name, "error", syncErr)
 			s.recordAudit(book, "integration", integ.ID, integ.Name, "sync_failed",
 				map[string]any{"error": syncErr.Error(), "scheduled": true})
+			s.notify(book, hook, "Sync failed: "+integ.Name, syncErr.Error())
 			continue
 		}
 		s.recordAudit(book, "integration", integ.ID, integ.Name, "synced", summary)
