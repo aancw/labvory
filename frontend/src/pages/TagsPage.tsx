@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 import { PencilIcon, PlusIcon, TagIcon, Trash2Icon } from "lucide-react"
 
@@ -21,6 +22,16 @@ export function TagsPage() {
   const tags = data?.tags ?? []
 
   const [createOpen, setCreateOpen] = useState(false)
+
+  // Quick add from the topbar lands here via ?new=1 — open the create dialog once.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      setCreateOpen(true)
+      searchParams.delete("new")
+      setSearchParams(searchParams, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
   const [name, setName] = useState("")
   const [color, setColor] = useState("zinc")
   const [editing, setEditing] = useState<Tag | null>(null)

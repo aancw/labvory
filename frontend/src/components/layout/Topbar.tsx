@@ -1,7 +1,19 @@
 import { useEffect, useState } from "react"
 import { Outlet, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
-import { LogOutIcon, MenuIcon, PlusIcon, SearchIcon, UserCircleIcon } from "lucide-react"
+import {
+  BoxesIcon,
+  CircuitBoardIcon,
+  HardDriveIcon,
+  LayersIcon,
+  LogOutIcon,
+  MapPinIcon,
+  MenuIcon,
+  PlusIcon,
+  SearchIcon,
+  TagsIcon,
+  UserCircleIcon,
+} from "lucide-react"
 
 import { CommandPalette } from "@/components/CommandPalette"
 import { LogoMark, Sidebar } from "@/components/layout/Sidebar"
@@ -61,16 +73,36 @@ export function Topbar() {
 
       <div className="flex-1" />
 
-      <Button
-        variant="outline"
-        size="sm"
-        className="hidden sm:inline-flex"
-        disabled
-        title="Asset registration arrives in Phase 2"
-      >
-        <PlusIcon className="size-4" aria-hidden />
-        Quick add
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className="hidden sm:inline-flex" aria-label="Quick add">
+            <PlusIcon className="size-4" aria-hidden />
+            Quick add
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44">
+          <DropdownMenuLabel>Create</DropdownMenuLabel>
+          <DropdownMenuItem onClick={() => navigate("/assets?new=1")}>
+            <BoxesIcon className="size-3.5" aria-hidden />Asset
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate("/subnets?new=1")}>
+            <HardDriveIcon className="size-3.5" aria-hidden />Subnet
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate("/vlans?new=1")}>
+            <LayersIcon className="size-3.5" aria-hidden />VLAN
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate("/services?new=1")}>
+            <CircuitBoardIcon className="size-3.5" aria-hidden />Service
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => navigate("/admin/locations?new=1")}>
+            <MapPinIcon className="size-3.5" aria-hidden />Location
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate("/admin/tags?new=1")}>
+            <TagsIcon className="size-3.5" aria-hidden />Tag
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <ThemeToggle />
 

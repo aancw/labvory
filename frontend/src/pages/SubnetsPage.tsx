@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { Link } from "react-router-dom"
+import { useEffect, useState } from "react"
+import { Link, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 import { GlobeIcon, PlusIcon, Trash2Icon } from "lucide-react"
 
@@ -172,6 +172,16 @@ export function SubnetsPage() {
   const { data, isLoading } = useSubnets({ q })
   const { data: contextData } = useNetworkContexts()
   const [createOpen, setCreateOpen] = useState(false)
+
+  // Quick add from the topbar lands here via ?new=1 — open the create dialog once.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      setCreateOpen(true)
+      searchParams.delete("new")
+      setSearchParams(searchParams, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
   const defaultContext = contextData?.contexts[0]?.id ?? ""
   const [form, setFormState] = useState<SubnetFormState>(() => emptySubnetForm(defaultContext))
   const setForm = (patch: Partial<SubnetFormState>) => setFormState((prev) => ({ ...prev, ...patch }))

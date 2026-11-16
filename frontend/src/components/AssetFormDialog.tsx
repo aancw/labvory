@@ -65,7 +65,10 @@ type AssetForm = z.infer<typeof assetSchema>
 interface AssetFormDialogProps {
   /** Present → edit mode; absent → create mode. */
   asset?: Asset
-  trigger: ReactNode
+  trigger?: ReactNode
+  /** Controlled open state (e.g. when the dialog is opened from outside the trigger). */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   /** Defaults applied in create mode (e.g. preset parent or type). */
   defaults?: Partial<Pick<AssetPayload, "parent_id" | "type_id" | "environment">>
   /** Create-mode convenience: preselect this asset-type slug (e.g. "vm"). */
@@ -108,12 +111,19 @@ function optionalDate(value: string | undefined): string | null {
 export function AssetFormDialog({
   asset,
   trigger,
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
   defaults,
   defaultTypeSlug,
   restrictTo,
   onSaved,
 }: AssetFormDialogProps) {
-  const [open, setOpen] = useState(false)
+  const [openState, setOpenState] = useState(false)
+  const open = openProp ?? openState
+  const setOpen = (v: boolean) => {
+    setOpenState(v)
+    onOpenChangeProp?.(v)
+  }
   const [locationId, setLocationId] = useState<string>(asset?.location_id ?? "")
   const [parentId, setParentId] = useState<string | null>(asset?.parent_id ?? defaults?.parent_id ?? null)
   const [tagIds, setTagIds] = useState<string[]>(asset?.tags.map((t) => t.id) ?? [])
@@ -234,7 +244,7 @@ export function AssetFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{asset ? `Edit ${asset.name}` : "Register asset"}</DialogTitle>

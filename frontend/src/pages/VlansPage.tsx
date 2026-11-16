@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 import { LayersIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
 
@@ -28,6 +29,16 @@ export function VlansPage() {
   const { data, isLoading } = useVlans()
   const vlans = data?.vlans ?? []
   const [formOpen, setFormOpen] = useState(false)
+
+  // Quick add from the topbar lands here via ?new=1 — open the create dialog once.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      setFormOpen(true)
+      searchParams.delete("new")
+      setSearchParams(searchParams, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
   const [editing, setEditing] = useState<Vlan | null>(null)
   const [contextId, setContextId] = useState("")
   const [vlanNumber, setVlanNumber] = useState("")

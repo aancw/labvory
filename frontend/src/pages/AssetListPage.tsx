@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 import {
@@ -103,6 +103,16 @@ export function AssetListPage() {
     }
     return {}
   })()
+
+  // Quick add from the topbar lands here via ?new=1 — open the register dialog once.
+  const [registerOpen, setRegisterOpen] = useState(false)
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      setRegisterOpen(true)
+      searchParams.delete("new")
+      setSearchParams(searchParams, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
   // URL is the source of truth for filters/sort/page so views are shareable.
   const q = searchParams.get("q") ?? ""
@@ -250,6 +260,8 @@ export function AssetListPage() {
       >
         <AssetFormDialog
           {...registerScope}
+          open={registerOpen}
+          onOpenChange={setRegisterOpen}
           trigger={<Button size="sm"><PlusIcon className="size-4" aria-hidden />Register asset</Button>}
         />
       </PageHeader>

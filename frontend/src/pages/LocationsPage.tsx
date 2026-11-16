@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { Link } from "react-router-dom"
+import { useEffect, useState } from "react"
+import { Link, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 import { ChevronRightIcon, MapPinIcon, PlusIcon, Trash2Icon } from "lucide-react"
 
@@ -20,6 +20,16 @@ export function LocationsPage() {
   const locations = data?.locations ?? []
 
   const [createOpen, setCreateOpen] = useState(false)
+
+  // Quick add from the topbar lands here via ?new=1 — open the create dialog once.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      setCreateOpen(true)
+      searchParams.delete("new")
+      setSearchParams(searchParams, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [parentId, setParentId] = useState<string>("")
