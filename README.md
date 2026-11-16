@@ -12,6 +12,8 @@ homelab operator.
 > and read-only integrations (Proxmox, Docker, Kubernetes, ICMP, DNS, Cloudflare, AdGuard Home,
 > ARP scan) are implemented. Remaining "planned" connectors (SNMP, SSH, UniFi, OPNsense) are
 > explicitly labeled in the UI — never faked.
+>
+> *README last reviewed against the codebase: 2026-11-17.*
 
 ---
 
@@ -99,8 +101,12 @@ auto-created when none matches. Raw packet access is required:
 
 ## Development
 
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the hot-reload workflow (Go server + Vite dev
-proxy), integration tests against a disposable PostgreSQL, and repository layout.
+```bash
+make dev    # PostgreSQL + API on :8090 + Vite on :5173, hot reload on both
+```
+
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for first-time setup, integration tests against a
+disposable PostgreSQL, and repository layout.
 
 ## Operations
 
