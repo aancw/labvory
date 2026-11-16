@@ -820,7 +820,7 @@ export function useIntegrations() {
 export function useCreateIntegration() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (payload: { kind: string; name: string; description: string; enabled: boolean; config: Record<string, unknown>; secrets?: Record<string, string> }) =>
+    mutationFn: (payload: { kind: string; name: string; description: string; enabled: boolean; config: Record<string, unknown>; secrets?: Record<string, string>; sync_interval_seconds?: number | null }) =>
       api.post<Integration>("/api/v1/integrations", payload),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["integrations"] }),
   })
@@ -829,7 +829,7 @@ export function useCreateIntegration() {
 export function useUpdateIntegration() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: { id: string; payload: { name: string; description: string; enabled: boolean; config: Record<string, unknown>; secrets?: Record<string, string> } }) =>
+    mutationFn: (input: { id: string; payload: { name: string; description: string; enabled: boolean; config: Record<string, unknown>; secrets?: Record<string, string>; sync_interval_seconds?: number | null } }) =>
       api.put<Integration>(`/api/v1/integrations/${input.id}`, input.payload),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["integrations"] }),
   })

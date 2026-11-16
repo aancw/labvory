@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/aancw/lanvory/internal/config"
 	"github.com/aancw/lanvory/internal/httpx"
 	"github.com/aancw/lanvory/internal/integrations"
+	"github.com/aancw/lanvory/internal/scheduler"
 	"github.com/aancw/lanvory/internal/secrets"
 	"github.com/aancw/lanvory/internal/store"
 )
@@ -93,6 +95,12 @@ func NewServer(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, authS
 		box:             box,
 		loginLimiter:    httpx.NewIPRateLimiter(12*time.Second, 8),
 	}
+}
+
+// StartScheduler runs the background scheduler (per-connector auto-syncs,
+// later health checks) until ctx is canceled. Call from main in a goroutine.
+func (s *Server) StartScheduler(ctx context.Context) {
+	scheduler.New(s.pool, s.runner, s.logger).Run(ctx)
 }
 
 // Routes builds the chi router for the API.

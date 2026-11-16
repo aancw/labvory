@@ -69,18 +69,33 @@ func (s *Server) redactIntegration(integ store.Integration) map[string]any {
 		"id": integ.ID, "kind": integ.Kind, "name": integ.Name,
 		"description": integ.Description, "enabled": integ.Enabled,
 		"config": cfg, "last_sync_at": integ.LastSyncAt,
-		"created_at": integ.CreatedAt, "updated_at": integ.UpdatedAt,
+		"sync_interval_seconds": integ.SyncIntervalSeconds,
+		"created_at":            integ.CreatedAt, "updated_at": integ.UpdatedAt,
 		"implemented": implementedKinds[integ.Kind],
 	}
 }
 
 type integrationPayload struct {
-	Kind        string          `json:"kind"`
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Enabled     bool            `json:"enabled"`
-	Config      json.RawMessage `json:"config"`
-	Secrets     json.RawMessage `json:"secrets"` // plaintext in, encrypted at rest, never out
+	Kind                string          `json:"kind"`
+	Name                string          `json:"name"`
+	Description         string          `json:"description"`
+	Enabled             bool            `json:"enabled"`
+	Config              json.RawMessage `json:"config"`
+	Secrets             json.RawMessage `json:"secrets"`               // plaintext in, encrypted at rest, never out
+	SyncIntervalSeconds *int            `json:"sync_interval_seconds"` // nil = manual sync only
+}
+
+// validateSyncInterval normalizes the auto-sync schedule: absent/0 → nil
+// (manual), otherwise bounded to 5 minutes … 7 days (mirrors the DB CHECK).
+func validateSyncInterval(v *int) (*int, *httpxError) {
+	if v == nil || *v == 0 {
+		return nil, nil
+	}
+	if *v < 300 || *v > 604800 {
+		return nil, errInvalid("invalid_sync_interval",
+			"sync_interval_seconds must be between 300 and 604800 (5 minutes … 7 days).")
+	}
+	return v, nil
 }
 
 // handleCreateIntegration stores a new integration; secrets are encrypted.
@@ -105,10 +120,15 @@ func (s *Server) handleCreateIntegration(w http.ResponseWriter, r *http.Request)
 		herr.write(reqCtx{w, r, currentUser(r)})
 		return
 	}
+	interval, herr := validateSyncInterval(p.SyncIntervalSeconds)
+	if herr != nil {
+		herr.write(reqCtx{w, r, currentUser(r)})
+		return
+	}
 
 	integ := store.Integration{
 		Kind: p.Kind, Name: p.Name, Description: p.Description,
-		Enabled: p.Enabled, Config: merged,
+		Enabled: p.Enabled, Config: merged, SyncIntervalSeconds: interval,
 	}
 	if err := s.integrations.Create(r.Context(), &integ); errors.Is(err, store.ErrConflict) {
 		httpx.Error(w, r, http.StatusConflict, "duplicate_integration",
@@ -155,10 +175,15 @@ func (s *Server) handleUpdateIntegration(w http.ResponseWriter, r *http.Request)
 		herr.write(reqCtx{w, r, currentUser(r)})
 		return
 	}
+	interval, herr := validateSyncInterval(p.SyncIntervalSeconds)
+	if herr != nil {
+		herr.write(reqCtx{w, r, currentUser(r)})
+		return
+	}
 
 	integ := store.Integration{
 		ID: id, Kind: existing.Kind, Name: p.Name, Description: p.Description,
-		Enabled: p.Enabled, Config: merged,
+		Enabled: p.Enabled, Config: merged, SyncIntervalSeconds: interval,
 	}
 	if err := s.integrations.Update(r.Context(), &integ); err != nil {
 		s.logger.Error("update integration failed", "error", err)

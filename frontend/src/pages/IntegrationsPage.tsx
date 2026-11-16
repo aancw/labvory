@@ -182,6 +182,24 @@ export function IntegrationsPage() {
   )
 }
 
+// Auto-sync schedule options (seconds; mirrors the API's 300…604800 bound).
+const SYNC_INTERVAL_OPTIONS = [
+  { value: "", label: "Manual only" },
+  { value: "900", label: "Every 15 minutes" },
+  { value: "3600", label: "Hourly" },
+  { value: "21600", label: "Every 6 hours" },
+  { value: "86400", label: "Daily" },
+  { value: "604800", label: "Weekly" },
+]
+
+function formatSyncInterval(seconds: number | null | undefined): string {
+  if (!seconds) return ""
+  if (seconds % 604800 === 0) return `auto every ${seconds / 604800}w`
+  if (seconds % 86400 === 0) return `auto every ${seconds / 86400}d`
+  if (seconds % 3600 === 0) return `auto every ${seconds / 3600}h`
+  return `auto every ${Math.round(seconds / 60)}m`
+}
+
 // Config values that identify a connector's source, in display priority order.
 // Everything empty/false is skipped — the card shows facts, not a raw config dump.
 const CONFIG_KEY_ORDER = [
@@ -217,6 +235,9 @@ function configChips(integ: Integration): { title: string; node: ReactNode }[] {
   }
   if (cfg.in_cluster === true) {
     add("in_cluster", <span className="font-mono">in-cluster</span>)
+  }
+  if (integ.sync_interval_seconds) {
+    add("sync_interval_seconds", <span className="font-mono">{formatSyncInterval(integ.sync_interval_seconds)}</span>)
   }
   const secrets = Object.entries(cfg.secrets_configured ?? {})
   if (secrets.length > 0) {
@@ -404,6 +425,7 @@ function IntegrationDialog({
   const [arpMode, setArpMode] = useState<"table" | "scan">("scan")
   const [arpInterface, setArpInterface] = useState("")
   const [arpCidr, setArpCidr] = useState("")
+  const [syncInterval, setSyncInterval] = useState("")
   const [enabled, setEnabled] = useState(true)
   const [loadedFor, setLoadedFor] = useState<string | null>(null)
 
@@ -434,6 +456,7 @@ function IntegrationDialog({
       setArpMode(((editing.config.mode as "table" | "scan") ?? "table"))
       setArpInterface((editing.config.interface as string) ?? "")
       setArpCidr((editing.config.cidr as string) ?? "")
+      setSyncInterval(editing.sync_interval_seconds ? String(editing.sync_interval_seconds) : "")
       setEnabled(editing.enabled)
     } else {
       setName("")
@@ -460,6 +483,7 @@ function IntegrationDialog({
       setArpMode("table")
       setArpInterface("")
       setArpCidr("")
+      setSyncInterval("")
       setEnabled(true)
     }
   }
@@ -542,9 +566,11 @@ function IntegrationDialog({
               ? { password: adguardPassword }
               : {}
 
+    const intervalSeconds = syncInterval === "" ? null : Number(syncInterval)
+
     if (editing) {
       update.mutate(
-        { id: editing.id, payload: { name: name.trim(), description: description.trim(), enabled, config, secrets } },
+        { id: editing.id, payload: { name: name.trim(), description: description.trim(), enabled, config, secrets, sync_interval_seconds: intervalSeconds } },
         {
           onSuccess: () => {
             toast.success("Integration updated.")
@@ -555,7 +581,7 @@ function IntegrationDialog({
       )
     } else {
       create.mutate(
-        { kind, name: name.trim(), description: description.trim(), enabled, config, secrets },
+        { kind, name: name.trim(), description: description.trim(), enabled, config, secrets, sync_interval_seconds: intervalSeconds },
         {
           onSuccess: () => {
             toast.success("Integration created.")
@@ -595,6 +621,23 @@ function IntegrationDialog({
               />
               <Label htmlFor="int-enabled" className="cursor-pointer">Enabled</Label>
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="int-sync-interval">Auto-sync schedule</Label>
+            <select
+              id="int-sync-interval"
+              className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+              value={syncInterval}
+              onChange={(e) => setSyncInterval(e.target.value)}
+            >
+              {SYNC_INTERVAL_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              The server runs the sync in the background when the interval elapses. Manual syncs stay available.
+            </p>
           </div>
 
           {kind === "proxmox" ? (

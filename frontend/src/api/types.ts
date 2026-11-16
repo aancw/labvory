@@ -500,6 +500,7 @@ export interface Integration {
     [key: string]: unknown
   }
   last_sync_at?: string | null
+  sync_interval_seconds?: number | null
   created_at: string
   updated_at: string
   implemented: boolean

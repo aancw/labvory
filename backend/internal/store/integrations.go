@@ -12,15 +12,16 @@ import (
 
 // Integration is a configured data source (Proxmox, Docker, ICMP…).
 type Integration struct {
-	ID          string          `json:"id"`
-	Kind        string          `json:"kind"`
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Enabled     bool            `json:"enabled"`
-	Config      json.RawMessage `json:"config"` // secrets inside are redacted by the API layer
-	LastSyncAt  *time.Time      `json:"last_sync_at,omitempty"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
+	ID                  string          `json:"id"`
+	Kind                string          `json:"kind"`
+	Name                string          `json:"name"`
+	Description         string          `json:"description"`
+	Enabled             bool            `json:"enabled"`
+	Config              json.RawMessage `json:"config"`                          // secrets inside are redacted by the API layer
+	SyncIntervalSeconds *int            `json:"sync_interval_seconds,omitempty"` // nil = manual only
+	LastSyncAt          *time.Time      `json:"last_sync_at,omitempty"`
+	CreatedAt           time.Time       `json:"created_at"`
+	UpdatedAt           time.Time       `json:"updated_at"`
 }
 
 type SyncRun struct {
@@ -39,7 +40,8 @@ func NewIntegrations(pool *pgxpool.Pool) *Integrations { return &Integrations{po
 
 func (s *Integrations) List(ctx context.Context) ([]Integration, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, kind, name, description, enabled, config, last_sync_at, created_at, updated_at
+		SELECT id, kind, name, description, enabled, config, sync_interval_seconds,
+		       last_sync_at, created_at, updated_at
 		FROM integrations ORDER BY kind, name`)
 	if err != nil {
 		return nil, err
@@ -48,8 +50,31 @@ func (s *Integrations) List(ctx context.Context) ([]Integration, error) {
 	out := []Integration{}
 	for rows.Next() {
 		var i Integration
-		if err := rows.Scan(&i.ID, &i.Kind, &i.Name, &i.Description, &i.Enabled,
-			&i.Config, &i.LastSyncAt, &i.CreatedAt, &i.UpdatedAt); err != nil {
+		if err := rows.Scan(&i.ID, &i.Kind, &i.Name, &i.Description, &i.Enabled, &i.Config,
+			&i.SyncIntervalSeconds, &i.LastSyncAt, &i.CreatedAt, &i.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, i)
+	}
+	return out, rows.Err()
+}
+
+// ListScheduled returns enabled integrations with an auto-sync interval.
+func (s *Integrations) ListScheduled(ctx context.Context) ([]Integration, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, kind, name, description, enabled, config, sync_interval_seconds,
+		       last_sync_at, created_at, updated_at
+		FROM integrations
+		WHERE enabled AND sync_interval_seconds IS NOT NULL ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Integration{}
+	for rows.Next() {
+		var i Integration
+		if err := rows.Scan(&i.ID, &i.Kind, &i.Name, &i.Description, &i.Enabled, &i.Config,
+			&i.SyncIntervalSeconds, &i.LastSyncAt, &i.CreatedAt, &i.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, i)
@@ -60,9 +85,11 @@ func (s *Integrations) List(ctx context.Context) ([]Integration, error) {
 func (s *Integrations) Get(ctx context.Context, id string) (Integration, error) {
 	var i Integration
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, kind, name, description, enabled, config, last_sync_at, created_at, updated_at
+		SELECT id, kind, name, description, enabled, config, sync_interval_seconds,
+		       last_sync_at, created_at, updated_at
 		FROM integrations WHERE id=$1`, id,
-	).Scan(&i.ID, &i.Kind, &i.Name, &i.Description, &i.Enabled, &i.Config, &i.LastSyncAt, &i.CreatedAt, &i.UpdatedAt)
+	).Scan(&i.ID, &i.Kind, &i.Name, &i.Description, &i.Enabled, &i.Config,
+		&i.SyncIntervalSeconds, &i.LastSyncAt, &i.CreatedAt, &i.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Integration{}, ErrNotFound
 	}
@@ -71,20 +98,21 @@ func (s *Integrations) Get(ctx context.Context, id string) (Integration, error) 
 
 func (s *Integrations) Create(ctx context.Context, i *Integration) error {
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO integrations (kind, name, description, enabled, config)
-		VALUES ($1,$2,$3,$4,$5)
+		INSERT INTO integrations (kind, name, description, enabled, config, sync_interval_seconds)
+		VALUES ($1,$2,$3,$4,$5,$6)
 		RETURNING id, created_at, updated_at`,
-		i.Kind, i.Name, i.Description, i.Enabled, i.Config,
+		i.Kind, i.Name, i.Description, i.Enabled, i.Config, i.SyncIntervalSeconds,
 	).Scan(&i.ID, &i.CreatedAt, &i.UpdatedAt)
 	return mapConstraint(err)
 }
 
 func (s *Integrations) Update(ctx context.Context, i *Integration) error {
 	err := s.pool.QueryRow(ctx, `
-		UPDATE integrations SET name=$2, description=$3, enabled=$4, config=$5, updated_at=now()
+		UPDATE integrations SET name=$2, description=$3, enabled=$4, config=$5,
+		       sync_interval_seconds=$6, updated_at=now()
 		WHERE id=$1
 		RETURNING updated_at`,
-		i.ID, i.Name, i.Description, i.Enabled, i.Config,
+		i.ID, i.Name, i.Description, i.Enabled, i.Config, i.SyncIntervalSeconds,
 	).Scan(&i.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound

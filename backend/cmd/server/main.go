@@ -50,9 +50,17 @@ func main() {
 		logger, cfg.SessionTTL,
 	)
 
+	apiSrv := api.NewServer(cfg, logger, pool, authSvc)
+
+	// Background scheduler: per-connector auto-syncs and health checks. It
+	// stops when the process shuts down; in-flight syncs record their history.
+	schedCtx, schedCancel := context.WithCancel(ctx)
+	defer schedCancel()
+	go apiSrv.StartScheduler(schedCtx)
+
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           api.NewServer(cfg, logger, pool, authSvc).Routes(),
+		Handler:           apiSrv.Routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
