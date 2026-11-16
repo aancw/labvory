@@ -12,7 +12,10 @@ import {
 } from "@/components/ui/dialog"
 
 interface ConfirmDialogProps {
-  trigger: ReactNode
+  trigger?: ReactNode
+  /** Controlled open state (e.g. when the confirm is opened from a menu). */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   title: string
   description: string
   confirmLabel?: string
@@ -22,18 +25,25 @@ interface ConfirmDialogProps {
 
 export function ConfirmDialog({
   trigger,
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
   title,
   description,
   confirmLabel = "Confirm",
   destructive = true,
   onConfirm,
 }: ConfirmDialogProps) {
-  const [open, setOpen] = useState(false)
+  const [openState, setOpenState] = useState(false)
+  const open = openProp ?? openState
+  const setOpen = (v: boolean) => {
+    setOpenState(v)
+    onOpenChangeProp?.(v)
+  }
   const [busy, setBusy] = useState(false)
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>

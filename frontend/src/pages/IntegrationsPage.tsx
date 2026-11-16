@@ -1,12 +1,15 @@
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 import {
   BoxesIcon,
   CloudIcon,
   ContainerIcon,
+  EllipsisVerticalIcon,
   GlobeIcon,
+  HistoryIcon,
   KeyRoundIcon,
+  PencilIcon,
   PlugIcon,
   RadarIcon,
   RadioIcon,
@@ -36,9 +39,16 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { formatRelative } from "@/lib/utils"
+import { cn, formatRelative } from "@/lib/utils"
 
 const KIND_META: Record<string, { label: string; icon: typeof ServerIcon; description: string }> = {
   proxmox: { label: "Proxmox VE", icon: ServerIcon, description: "Read-only API token: imports nodes, VMs and LXC guests with source attribution." },
@@ -57,7 +67,8 @@ export function IntegrationsPage() {
   const remove = useDeleteIntegration()
   const [editing, setEditing] = useState<Integration | null>(null)
   const [creatingKind, setCreatingKind] = useState<string | null>(null)
-  const [historyFor, setHistoryFor] = useState<string | null>(null)
+  const [historyFor, setHistoryFor] = useState<Integration | null>(null)
+  const [deleting, setDeleting] = useState<Integration | null>(null)
 
   if (isLoading) {
     return <div className="h-64 animate-pulse rounded-lg bg-accent" />
@@ -90,7 +101,7 @@ export function IntegrationsPage() {
           description="Add a connector below. Discovery is always opt-in per connector."
         />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {integrations.map((integ) => (
             <IntegrationCard
               key={integ.id}
@@ -102,13 +113,8 @@ export function IntegrationsPage() {
                   onError: (err) => toast.error(isApiError(err) ? err.message : "Sync failed."),
                 })
               }
-              onDelete={() =>
-                remove.mutate(integ.id, {
-                  onError: (err) => toast.error(isApiError(err) ? err.message : "Delete failed."),
-                })
-              }
-              onToggleHistory={() => setHistoryFor(historyFor === integ.id ? null : integ.id)}
-              historyOpen={historyFor === integ.id}
+              onDelete={() => setDeleting(integ)}
+              onHistory={() => setHistoryFor(integ)}
               // isPending is shared across the page's single mutation instance —
               // key it to the clicked integration so only its card shows progress.
               syncing={sync.isPending && sync.variables === integ.id}
@@ -156,113 +162,188 @@ export function IntegrationsPage() {
           setEditing(null)
         }}
       />
+
+      <SyncHistoryDialog integ={historyFor} onClose={() => setHistoryFor(null)} />
+
+      <ConfirmDialog
+        open={!!deleting}
+        onOpenChange={(v) => { if (!v) setDeleting(null) }}
+        title={deleting ? `Delete ${deleting.name}?` : "Delete integration?"}
+        description="Imported assets stay in the inventory — only the connector and its sync history are removed."
+        confirmLabel="Delete connector"
+        onConfirm={() => {
+          if (!deleting) return
+          remove.mutate(deleting.id, {
+            onError: (err) => toast.error(isApiError(err) ? err.message : "Delete failed."),
+          })
+        }}
+      />
     </>
   )
 }
 
+// Config values that identify a connector's source, in display priority order.
+// Everything empty/false is skipped — the card shows facts, not a raw config dump.
+const CONFIG_KEY_ORDER = [
+  "endpoint", "host", "server", "api_server",
+  "mode", "interface", "cidr",
+  "username", "token_id", "context", "kubeconfig",
+] as const
+
+function configChips(integ: Integration): { title: string; node: ReactNode }[] {
+  const cfg = integ.config
+  const chips: { title: string; node: ReactNode }[] = []
+  const add = (title: string, node: ReactNode) => chips.push({ title, node })
+
+  for (const key of CONFIG_KEY_ORDER) {
+    const value = cfg[key]
+    if (typeof value === "string" && value.trim()) {
+      add(`${key}: ${value.trim()}`, <span className="font-mono">{value.trim()}</span>)
+    }
+  }
+  if (typeof cfg.asset_id === "string" && cfg.asset_id) {
+    add(
+      "host asset",
+      <Link to={`/assets/${cfg.asset_id}`} className="font-mono underline-offset-2 hover:underline">host asset</Link>,
+    )
+  }
+  if (Array.isArray(cfg.zone_names) && cfg.zone_names.length > 0) {
+    const n = cfg.zone_names.length
+    add("zone_names", <span className="font-mono">{n} zone{n === 1 ? "" : "s"}</span>)
+  }
+  if (Array.isArray(cfg.asset_ids) && cfg.asset_ids.length > 0) {
+    const n = cfg.asset_ids.length
+    add("scope", <span className="font-mono">{n} asset{n === 1 ? "" : "s"}</span>)
+  }
+  if (cfg.in_cluster === true) {
+    add("in_cluster", <span className="font-mono">in-cluster</span>)
+  }
+  const secrets = Object.entries(cfg.secrets_configured ?? {})
+  if (secrets.length > 0) {
+    const allSet = secrets.every(([, v]) => v)
+    add(
+      `secrets: ${secrets.map(([k, v]) => `${k} ${v ? "configured" : "missing"}`).join(", ")}`,
+      <span className={cn("flex items-center gap-1", allSet ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400")}>
+        <KeyRoundIcon className="size-3" aria-hidden />
+        {allSet ? "secrets" : "secret missing"}
+      </span>,
+    )
+  }
+  return chips
+}
+
 function IntegrationCard({
-  integ, onEdit, onSync, onDelete, onToggleHistory, historyOpen, syncing,
+  integ, onEdit, onSync, onDelete, onHistory, syncing,
 }: {
   integ: Integration
   onEdit: () => void
   onSync: () => void
   onDelete: () => void
-  onToggleHistory: () => void
-  historyOpen: boolean
+  onHistory: () => void
   syncing: boolean
 }) {
   const meta = KIND_META[integ.kind]
+  const Icon = meta?.icon ?? PlugIcon
+  const chips = configChips(integ)
+
   return (
-    <Card>
-      <CardHeader className="flex-row items-start justify-between">
-        <div className="flex items-center gap-2.5">
-          {meta ? <KindIconFromMeta meta={integ.kind} /> : <PlugIcon className="size-5 text-muted-foreground" aria-hidden />}
-          <div>
-            <CardTitle className="text-sm flex items-center gap-2">
-              {integ.name}
-              {integ.enabled ? (
-                <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">enabled</Badge>
-              ) : (
-                <Badge variant="outline">disabled</Badge>
-              )}
-            </CardTitle>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {meta?.label ?? integ.kind} · last sync {integ.last_sync_at ? formatRelative(integ.last_sync_at) : "never"}
-            </p>
+    <Card className="gap-3 p-4">
+      <div className="flex items-start gap-2.5">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-muted/40">
+          <Icon className="size-4 text-muted-foreground" aria-hidden />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <CardTitle className="truncate text-sm leading-tight">{integ.name}</CardTitle>
+            {integ.enabled ? (
+              <Badge className="shrink-0 border-transparent bg-emerald-500/10 px-1.5 py-0 text-[10px] text-emerald-600 dark:text-emerald-400">
+                enabled
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px]">disabled</Badge>
+            )}
           </div>
+          <p className="mt-1 truncate text-xs text-muted-foreground">{meta?.label ?? integ.kind}</p>
         </div>
-        <div className="flex gap-1.5">
-          <Button variant="outline" size="sm" onClick={onSync} disabled={syncing || !integ.implemented || !integ.enabled}>
-            <RefreshCwIcon className={cn2(syncing ? "animate-spin" : "", "size-4")} aria-hidden />
-            {syncing ? "Syncing…" : "Sync now"}
+      </div>
+
+      {chips.length > 0 ? (
+        <div className="flex flex-wrap gap-1">
+          {chips.map((chip, i) => (
+            <span
+              key={i}
+              title={chip.title}
+              className="inline-flex max-w-full items-center gap-1 rounded-md border bg-muted/30 px-1.5 py-0.5 text-[11px] leading-tight text-muted-foreground"
+            >
+              <span className="truncate">{chip.node}</span>
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="mt-auto flex items-center justify-between gap-2 border-t pt-3">
+        <span className="truncate text-xs text-muted-foreground">
+          {integ.last_sync_at ? formatRelative(integ.last_sync_at) : "never synced"}
+        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1.5 px-2.5 text-xs"
+            onClick={onSync}
+            disabled={syncing || !integ.implemented || !integ.enabled}
+          >
+            <RefreshCwIcon className={cn(syncing ? "animate-spin" : "", "size-3.5")} aria-hidden />
+            {syncing ? "Syncing…" : "Sync"}
           </Button>
-          <Button variant="ghost" size="sm" onClick={onEdit}>Edit</Button>
-          <ConfirmDialog
-            trigger={
-              <Button variant="ghost" size="icon" className="size-7" aria-label={`Delete ${integ.name}`}>
-                <Trash2Icon className="size-3.5" aria-hidden />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-7" aria-label={`More actions for ${integ.name}`}>
+                <EllipsisVerticalIcon className="size-4" aria-hidden />
               </Button>
-            }
-            title={`Delete ${integ.name}?`}
-            description="Imported assets stay in the inventory — only the connector and its sync history are removed."
-            confirmLabel="Delete connector"
-            onConfirm={onDelete}
-          />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={onEdit}>
+                <PencilIcon className="size-3.5" aria-hidden />Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onHistory}>
+                <HistoryIcon className="size-3.5" aria-hidden />Sync history
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+                <Trash2Icon className="size-3.5" aria-hidden />Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-      </CardHeader>
-      <CardContent>
-        {meta ? <p className="mb-3 text-xs text-muted-foreground">{meta.description}</p> : null}
-
-        {/* Source config summary */}
-        <dl className="mb-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-          {Object.entries(integ.config)
-            .filter(([key]) => !key.startsWith("secrets"))
-            .map(([key, value]) => (
-              <div key={key} className="flex justify-between gap-2 overflow-hidden">
-                <dt className="shrink-0 text-muted-foreground">{key}</dt>
-                <dd className="truncate font-mono">{key === "asset_id" && typeof value === "string" ? (
-                  <Link to={`/assets/${value}`} className="hover:underline underline-offset-2">host asset</Link>
-                ) : String(value)}</dd>
-              </div>
-            ))}
-          {integ.config.secrets_configured ? (
-            <div className="col-span-2 flex justify-between gap-2">
-              <dt className="text-muted-foreground">secrets</dt>
-              <dd className="font-mono">
-                {Object.entries(integ.config.secrets_configured).map(([k, v]) => (
-                  <span key={k} className={cn2(v ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
-                    {k}: {v ? "configured ✓" : "missing"}
-                  </span>
-                ))}
-              </dd>
-            </div>
-          ) : null}
-        </dl>
-
-        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onToggleHistory}>
-          {historyOpen ? "Hide sync history" : "Show sync history"}
-        </Button>
-        {historyOpen ? <SyncHistory integrationId={integ.id} /> : null}
-      </CardContent>
+      </div>
     </Card>
   )
 }
 
-function KindIconFromMeta({ meta }: { meta: string }) {
-  const meta_ = KIND_META[meta]
-  const Icon = meta_?.icon ?? PlugIcon
-  return <Icon className="size-5 text-muted-foreground" aria-hidden />
+function SyncHistoryDialog({ integ, onClose }: { integ: Integration | null; onClose: () => void }) {
+  return (
+    <Dialog open={!!integ} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{integ ? `${integ.name} — sync history` : "Sync history"}</DialogTitle>
+          <DialogDescription>The most recent runs for this connector.</DialogDescription>
+        </DialogHeader>
+        {integ ? <SyncHistory integrationId={integ.id} /> : null}
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 function SyncHistory({ integrationId }: { integrationId: string }) {
   const { data, isLoading } = useSyncRuns(integrationId, true)
-  if (isLoading) return <p className="mt-2 text-xs text-muted-foreground">Loading…</p>
+  if (isLoading) return <p className="text-xs text-muted-foreground">Loading…</p>
   const runs = data?.runs ?? []
   if (runs.length === 0) {
-    return <p className="mt-2 text-xs text-muted-foreground">No sync runs yet.</p>
+    return <p className="text-xs text-muted-foreground">No sync runs yet.</p>
   }
   return (
-    <ul className="mt-2 space-y-1.5">
+    <ul className="max-h-80 space-y-1.5 overflow-y-auto">
       {runs.map((run) => (
         <li key={run.id} className="flex items-center gap-2.5 rounded border px-2.5 py-1.5 text-xs">
           <span
@@ -785,9 +866,4 @@ function IntegrationDialog({
       </DialogContent>
     </Dialog>
   )
-}
-
-// tiny local helper to avoid importing cn twice with different names
-function cn2(...classes: (string | false | undefined)[]) {
-  return classes.filter(Boolean).join(" ")
 }
