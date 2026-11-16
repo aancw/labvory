@@ -257,6 +257,7 @@ func (s *Server) mountDataRoutes(r chi.Router) {
 		})
 	})
 	r.Delete("/service-endpoints/{endpointID}", s.handleDeleteServiceEndpoint)
+	r.Put("/service-endpoints/{endpointID}/health", s.handleToggleEndpointHealth)
 	r.Delete("/service-deployments/{deploymentID}", s.handleDeleteServiceDeployment)
 
 	// Topology + data portability (Phase 5).

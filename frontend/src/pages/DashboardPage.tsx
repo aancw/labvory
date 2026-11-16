@@ -140,6 +140,7 @@ export function DashboardPage() {
           {(() => {
             const stats = data as DashboardStatsV2
             const alertItems = [
+              { label: "Services down", count: stats.alerts?.services_down ?? 0, to: "/services" },
               { label: "IP conflicts", count: stats.alerts?.ip_conflicts ?? 0, to: "/ips?status=conflict" },
               { label: "Warranty expiring (60d)", count: stats.alerts?.warranty_expiring ?? 0, to: "/assets" },
               { label: "Services without host", count: stats.alerts?.services_without_host ?? 0, to: "/services" },

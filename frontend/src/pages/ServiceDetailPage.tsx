@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 import {
+  ActivityIcon,
   ArrowLeftIcon,
   ExternalLinkIcon,
   GlobeIcon,
@@ -13,6 +14,7 @@ import {
 
 import { isApiError } from "@/api/client"
 import {
+  useToggleEndpointHealth,
   useCreateServiceDeployment,
   useCreateServiceEndpoint,
   useDeleteService,
@@ -21,6 +23,9 @@ import {
   useService,
   useUpdateService,
 } from "@/api/hooks"
+import type { ServiceEndpoint } from "@/api/types"
+import { formatRelative } from "@/lib/utils"
+
 import { AssetPicker } from "@/components/AssetPicker"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { EmptyState } from "@/components/EmptyState"
@@ -191,32 +196,48 @@ export function ServiceDetailPage() {
   )
 }
 
+function endpointHealth(ep: ServiceEndpoint): "up" | "down" | "unknown" | null {
+  if (!ep.health_enabled) return null
+  if (ep.last_checked_at == null) return "unknown"
+  if (ep.last_error || ep.last_status == null || ep.last_status >= 400) return "down"
+  return "up"
+}
+
+const HEALTH_DOT: Record<"up" | "down" | "unknown", string> = {
+  up: "bg-emerald-500",
+  down: "bg-red-500",
+  unknown: "bg-zinc-400",
+}
+
 function EndpointsCard({
   serviceId, endpoints,
 }: {
   serviceId: string
-  endpoints: { id: string; label: string; protocol: string; port?: number | null; url: string; is_external: boolean }[]
+  endpoints: ServiceEndpoint[]
 }) {
   const create = useCreateServiceEndpoint()
   const remove = useDeleteServiceEndpoint()
+  const toggleHealth = useToggleEndpointHealth()
   const [open, setOpen] = useState(false)
   const [label, setLabel] = useState("")
   const [protocol, setProtocol] = useState("http")
   const [port, setPort] = useState("")
   const [url, setUrl] = useState("")
   const [isExternal, setIsExternal] = useState(false)
+  const [healthEnabled, setHealthEnabled] = useState(false)
 
   const submit = () => {
     const portNum = port.trim() === "" ? null : Number(port)
     create.mutate(
-      { serviceId, payload: { label: label.trim(), protocol, port: portNum, url: url.trim(), is_external: isExternal } },
+      { serviceId, payload: { label: label.trim(), protocol, port: portNum, url: url.trim(), is_external: isExternal, health_enabled: healthEnabled } },
       {
         onSuccess: () => {
-          toast.success("Endpoint added.")
+          toast.success(healthEnabled ? "Endpoint added — health checks start within a minute." : "Endpoint added.")
           setOpen(false)
           setLabel("")
           setPort("")
           setUrl("")
+          setHealthEnabled(false)
         },
         onError: (err) => toast.error(isApiError(err) ? err.message : "Could not add endpoint."),
       },
@@ -252,6 +273,43 @@ function EndpointsCard({
                   </span>
                 )}
                 {e.is_external ? <span className="text-xs text-muted-foreground">external</span> : null}
+                {(() => {
+                  const state = endpointHealth(e)
+                  if (!state) return null
+                  const tip = state === "unknown"
+                    ? "Health check enabled — first result pending"
+                    : state === "up"
+                      ? `Up · HTTP ${e.last_status} · ${e.last_latency_ms} ms · ${formatRelative(e.last_checked_at!)}`
+                      : `Down · ${e.last_error || `HTTP ${e.last_status}`} · ${formatRelative(e.last_checked_at!)}`
+                  return (
+                    <span
+                      title={tip}
+                      className={`size-2 shrink-0 rounded-full ${HEALTH_DOT[state]}`}
+                      aria-label={`Health: ${state}`}
+                    />
+                  )
+                })()}
+                {e.protocol === "http" || e.protocol === "https" ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    title={e.health_enabled ? "Disable health checks" : "Enable health checks"}
+                    aria-label={e.health_enabled ? `Disable health checks for ${e.label || e.url}` : `Enable health checks for ${e.label || e.url}`}
+                    disabled={toggleHealth.isPending}
+                    onClick={() =>
+                      toggleHealth.mutate(
+                        { id: e.id, enabled: !e.health_enabled },
+                        {
+                          onSuccess: () => toast.success(e.health_enabled ? "Health checks disabled." : "Health checks enabled — first check runs within a minute."),
+                          onError: (err) => toast.error(isApiError(err) ? err.message : "Update failed."),
+                        },
+                      )
+                    }
+                  >
+                    <ActivityIcon className="size-3.5" aria-hidden />
+                  </Button>
+                ) : null}
                 <ConfirmDialog
                   trigger={
                     <Button variant="ghost" size="icon" className="size-7" aria-label="Remove endpoint">
@@ -307,6 +365,12 @@ function EndpointsCard({
                 <input type="checkbox" checked={isExternal} onChange={(e) => setIsExternal(e.target.checked)} />
                 Externally reachable (published through a reverse proxy)
               </label>
+              {(protocol === "http" || protocol === "https") && url.trim() !== "" ? (
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={healthEnabled} onChange={(e) => setHealthEnabled(e.target.checked)} />
+                  Health checks — probe this URL every minute and alert on downtime
+                </label>
+              ) : null}
             </div>
             <DialogFooter>
               <Button variant="outline" size="sm" onClick={() => setOpen(false)}>Cancel</Button>

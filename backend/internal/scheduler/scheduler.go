@@ -7,7 +7,9 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,12 +18,17 @@ import (
 	"github.com/aancw/lanvory/internal/store"
 )
 
-const tickInterval = 30 * time.Second
+const (
+	tickInterval       = 30 * time.Second
+	healthCheckEvery   = 60 * time.Second // per-endpoint re-check cadence
+	healthProbeTimeout = 8 * time.Second
+)
 
 // Scheduler is the single background worker.
 type Scheduler struct {
 	pool         *pgxpool.Pool
 	integrations *store.Integrations
+	services     *store.Services
 	audit        *store.AuditEvents
 	runner       *integrations.Runner
 	logger       *slog.Logger
@@ -31,6 +38,7 @@ func New(pool *pgxpool.Pool, runner *integrations.Runner, logger *slog.Logger) *
 	return &Scheduler{
 		pool:         pool,
 		integrations: store.NewIntegrations(pool),
+		services:     store.NewServices(pool),
 		audit:        store.NewAuditEvents(pool),
 		runner:       runner,
 		logger:       logger,
@@ -54,6 +62,65 @@ func (s *Scheduler) Run(ctx context.Context) {
 
 func (s *Scheduler) tick(ctx context.Context) {
 	s.syncDueIntegrations(ctx)
+	s.checkDueEndpoints(ctx)
+}
+
+// checkDueEndpoints probes every service endpoint with health checks enabled
+// and records the observed result. Up↔down transitions are audited so the
+// Activity page shows when a service flapped.
+func (s *Scheduler) checkDueEndpoints(ctx context.Context) {
+	endpoints, err := s.services.DueHealthEndpoints(ctx, healthCheckEvery)
+	if err != nil {
+		s.logger.Error("scheduler: list due health endpoints failed", "error", err)
+		return
+	}
+	book := context.WithoutCancel(ctx)
+	client := &http.Client{Timeout: healthProbeTimeout}
+	for _, ep := range endpoints {
+		wasUp := wasEndpointUp(ep)
+		status, latency, errText := probeHTTP(ctx, client, ep.URL)
+		if err := s.services.RecordHealthCheck(book, ep.ID, status, latency, errText); err != nil {
+			s.logger.Error("scheduler: record health check failed", "error", err, "endpoint", ep.ID)
+			continue
+		}
+		isUp := errText == "" && status >= 200 && status < 400
+		if ep.LastCheckedAt != nil && isUp != wasUp {
+			action, detail := "health_down", map[string]any{
+				"url": ep.URL, "status": status, "error": errText,
+			}
+			if isUp {
+				action = "health_recovered"
+				detail = map[string]any{"url": ep.URL, "status": status, "latency_ms": latency}
+			}
+			s.recordAudit(book, "service_endpoint", ep.ID, ep.ServiceName+" · "+ep.Label, action, detail)
+		}
+	}
+}
+
+// wasEndpointUp reconstructs the endpoint's previous observed state.
+func wasEndpointUp(ep store.HealthEndpoint) bool {
+	if ep.LastCheckedAt == nil {
+		return true // never checked: treated as up so only real failures notify
+	}
+	return ep.LastError == "" && ep.LastStatus != nil && *ep.LastStatus >= 200 && *ep.LastStatus < 400
+}
+
+// probeHTTP performs one GET and returns the observed status/latency/error.
+func probeHTTP(ctx context.Context, client *http.Client, url string) (statusCode, latencyMS int, errText string) {
+	start := time.Now()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return 0, 0, err.Error()
+	}
+	req.Header.Set("User-Agent", "lanvory-health-check")
+	resp, err := client.Do(req)
+	latencyMS = int(time.Since(start).Milliseconds())
+	if err != nil {
+		return 0, latencyMS, err.Error()
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+	return resp.StatusCode, latencyMS, ""
 }
 
 // syncDueIntegrations runs every enabled integration whose auto-sync interval

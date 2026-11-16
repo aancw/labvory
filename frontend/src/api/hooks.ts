@@ -724,6 +724,20 @@ export function useDeleteServiceEndpoint() {
   })
 }
 
+export function useToggleEndpointHealth() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { id: string; enabled: boolean }) =>
+      api.put<{ ok: boolean; health_enabled: boolean }>(`/api/v1/service-endpoints/${input.id}/health`, {
+        enabled: input.enabled,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["service"] })
+      void qc.invalidateQueries({ queryKey: ["stats"] })
+    },
+  })
+}
+
 export function useCreateServiceDeployment() {
   const qc = useQueryClient()
   return useMutation({

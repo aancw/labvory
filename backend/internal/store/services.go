@@ -35,6 +35,13 @@ type ServiceEndpoint struct {
 	Port       *int   `json:"port,omitempty"`
 	URL        string `json:"url"`
 	IsExternal bool   `json:"is_external"`
+
+	// Observed health-check state (scheduler-written; declared data above).
+	HealthEnabled bool       `json:"health_enabled"`
+	LastCheckedAt *time.Time `json:"last_checked_at,omitempty"`
+	LastStatus    *int       `json:"last_status,omitempty"`
+	LastLatencyMS *int       `json:"last_latency_ms,omitempty"`
+	LastError     string     `json:"last_error"`
 }
 
 type ServiceDeployment struct {
@@ -149,7 +156,8 @@ func (s *Services) Delete(ctx context.Context, id string) error {
 
 func (s *Services) ListEndpoints(ctx context.Context, serviceID string) ([]ServiceEndpoint, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, service_id, label, protocol, port, url, is_external
+		SELECT id, service_id, label, protocol, port, url, is_external,
+		       health_enabled, last_checked_at, last_status, last_latency_ms, last_error
 		FROM service_endpoints WHERE service_id=$1 ORDER BY is_external, protocol, port`, serviceID)
 	if err != nil {
 		return nil, err
@@ -158,7 +166,8 @@ func (s *Services) ListEndpoints(ctx context.Context, serviceID string) ([]Servi
 	out := []ServiceEndpoint{}
 	for rows.Next() {
 		var e ServiceEndpoint
-		if err := rows.Scan(&e.ID, &e.ServiceID, &e.Label, &e.Protocol, &e.Port, &e.URL, &e.IsExternal); err != nil {
+		if err := rows.Scan(&e.ID, &e.ServiceID, &e.Label, &e.Protocol, &e.Port, &e.URL, &e.IsExternal,
+			&e.HealthEnabled, &e.LastCheckedAt, &e.LastStatus, &e.LastLatencyMS, &e.LastError); err != nil {
 			return nil, err
 		}
 		out = append(out, e)
@@ -166,12 +175,94 @@ func (s *Services) ListEndpoints(ctx context.Context, serviceID string) ([]Servi
 	return out, rows.Err()
 }
 
+// Endpoint returns one endpoint by id.
+func (s *Services) Endpoint(ctx context.Context, id string) (ServiceEndpoint, error) {
+	var e ServiceEndpoint
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, service_id, label, protocol, port, url, is_external,
+		       health_enabled, last_checked_at, last_status, last_latency_ms, last_error
+		FROM service_endpoints WHERE id=$1`, id,
+	).Scan(&e.ID, &e.ServiceID, &e.Label, &e.Protocol, &e.Port, &e.URL, &e.IsExternal,
+		&e.HealthEnabled, &e.LastCheckedAt, &e.LastStatus, &e.LastLatencyMS, &e.LastError)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ServiceEndpoint{}, ErrNotFound
+	}
+	return e, err
+}
+
+// HealthEndpoint is a service endpoint joined with its service name, used by
+// the scheduler for health checks and notifications.
+type HealthEndpoint struct {
+	ServiceEndpoint
+	ServiceName string `json:"service_name"`
+}
+
+// DueHealthEndpoints returns enabled endpoints (HTTP/HTTPS only) not checked
+// within olderThan seconds.
+func (s *Services) DueHealthEndpoints(ctx context.Context, olderThan time.Duration) ([]HealthEndpoint, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT e.id, e.service_id, e.label, e.protocol, e.port, e.url, e.is_external,
+		       e.health_enabled, e.last_checked_at, e.last_status, e.last_latency_ms, e.last_error,
+		       sv.name
+		FROM service_endpoints e
+		JOIN services sv ON sv.id = e.service_id
+		WHERE e.health_enabled AND e.protocol IN ('http', 'https') AND e.url <> ''
+		  AND (e.last_checked_at IS NULL OR e.last_checked_at < now() - make_interval(secs => $1))
+		ORDER BY e.id`, int(olderThan.Seconds()))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []HealthEndpoint{}
+	for rows.Next() {
+		var e HealthEndpoint
+		if err := rows.Scan(&e.ID, &e.ServiceID, &e.Label, &e.Protocol, &e.Port, &e.URL, &e.IsExternal,
+			&e.HealthEnabled, &e.LastCheckedAt, &e.LastStatus, &e.LastLatencyMS, &e.LastError,
+			&e.ServiceName); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// RecordHealthCheck stores the observed probe result for an endpoint.
+func (s *Services) RecordHealthCheck(ctx context.Context, endpointID string, statusCode, latencyMS int, errText string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE service_endpoints
+		SET last_checked_at=now(), last_status=$2, last_latency_ms=$3, last_error=$4
+		WHERE id=$1`, endpointID, statusCode, latencyMS, errText)
+	return err
+}
+
+// CountEndpointsDown returns enabled endpoints whose last check failed
+// (transport error or HTTP >= 400). Endpoints never checked count as unknown,
+// not down.
+func (s *Services) CountEndpointsDown(ctx context.Context) (int, error) {
+	var n int
+	err := s.pool.QueryRow(ctx, `
+		SELECT count(*) FROM service_endpoints
+		WHERE health_enabled AND last_checked_at IS NOT NULL
+		  AND (last_error <> '' OR last_status IS NULL OR last_status >= 400)`).Scan(&n)
+	return n, err
+}
+
 func (s *Services) CreateEndpoint(ctx context.Context, e *ServiceEndpoint) error {
 	return s.pool.QueryRow(ctx, `
-		INSERT INTO service_endpoints (service_id, label, protocol, port, url, is_external)
-		VALUES ($1,$2,$3,$4,$5,$6)
-		RETURNING id`, e.ServiceID, e.Label, e.Protocol, e.Port, e.URL, e.IsExternal,
+		INSERT INTO service_endpoints (service_id, label, protocol, port, url, is_external, health_enabled)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)
+		RETURNING id`, e.ServiceID, e.Label, e.Protocol, e.Port, e.URL, e.IsExternal, e.HealthEnabled,
 	).Scan(&e.ID)
+}
+
+// SetEndpointHealth toggles the scheduler probe for one endpoint (declared
+// endpoint fields are left untouched).
+func (s *Services) SetEndpointHealth(ctx context.Context, endpointID string, enabled bool) error {
+	tag, err := s.pool.Exec(ctx, `UPDATE service_endpoints SET health_enabled=$2 WHERE id=$1`, endpointID, enabled)
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
 }
 
 func (s *Services) DeleteEndpoint(ctx context.Context, id string) error {

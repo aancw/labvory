@@ -233,11 +233,12 @@ func (s *Server) handleDeleteService(w http.ResponseWriter, r *http.Request) {
 // ---------- endpoints ----------
 
 type endpointPayload struct {
-	Label      string `json:"label"`
-	Protocol   string `json:"protocol"`
-	Port       *int   `json:"port"`
-	URL        string `json:"url"`
-	IsExternal bool   `json:"is_external"`
+	Label         string `json:"label"`
+	Protocol      string `json:"protocol"`
+	Port          *int   `json:"port"`
+	URL           string `json:"url"`
+	IsExternal    bool   `json:"is_external"`
+	HealthEnabled bool   `json:"health_enabled"`
 }
 
 func validateEndpointPayload(p *endpointPayload) *httpxError {
@@ -249,6 +250,9 @@ func validateEndpointPayload(p *endpointPayload) *httpxError {
 	}
 	if p.Port != nil && (*p.Port < 1 || *p.Port > 65535) {
 		return errInvalid("invalid_port", "Port must be between 1 and 65535.")
+	}
+	if p.HealthEnabled && !setOf("http", "https")[p.Protocol] {
+		return errInvalid("invalid_protocol", "Health checks need an http or https endpoint with a URL.")
 	}
 	return nil
 }
@@ -270,7 +274,7 @@ func (s *Server) handleCreateServiceEndpoint(w http.ResponseWriter, r *http.Requ
 	}
 	e := store.ServiceEndpoint{
 		ServiceID: serviceID, Label: p.Label, Protocol: p.Protocol,
-		Port: p.Port, URL: p.URL, IsExternal: p.IsExternal,
+		Port: p.Port, URL: p.URL, IsExternal: p.IsExternal, HealthEnabled: p.HealthEnabled,
 	}
 	if err := s.services.CreateEndpoint(r.Context(), &e); err != nil {
 		s.logger.Error("create endpoint failed", "error", err)
@@ -295,6 +299,49 @@ func (s *Server) handleDeleteServiceEndpoint(w http.ResponseWriter, r *http.Requ
 	}
 	s.auditChange(r, currentUser(r), "service_endpoint", id, "", "deleted", nil)
 	httpx.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleToggleEndpointHealth flips the scheduler probe for one endpoint.
+func (s *Server) handleToggleEndpointHealth(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "endpointID")
+	if !isUUID(id) {
+		httpx.Error(w, r, http.StatusBadRequest, "invalid_id", "Invalid endpoint id.", nil)
+		return
+	}
+	var p struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := httpx.DecodeJSON(r, &p); err != nil {
+		httpx.Error(w, r, http.StatusBadRequest, "invalid_request", err.Error(), nil)
+		return
+	}
+	health, err := s.services.Endpoint(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		httpx.Error(w, r, http.StatusNotFound, "not_found", "Endpoint not found.", nil)
+		return
+	}
+	if err != nil {
+		s.logger.Error("endpoint health toggle: load failed", "error", err)
+		httpx.Error(w, r, http.StatusInternalServerError, "internal", "Could not update endpoint.", nil)
+		return
+	}
+	if p.Enabled && !setOf("http", "https")[health.Protocol] {
+		httpx.Error(w, r, http.StatusUnprocessableEntity, "invalid_protocol",
+			"Health checks need an http or https endpoint with a URL.", nil)
+		return
+	}
+	if err := s.services.SetEndpointHealth(r.Context(), id, p.Enabled); err != nil {
+		s.logger.Error("endpoint health toggle failed", "error", err)
+		httpx.Error(w, r, http.StatusInternalServerError, "internal", "Could not update endpoint.", nil)
+		return
+	}
+	action := "health_disabled"
+	if p.Enabled {
+		action = "health_enabled"
+	}
+	s.auditChange(r, currentUser(r), "service_endpoint", id, health.Label, action,
+		map[string]any{"url": health.URL})
+	httpx.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true, "health_enabled": p.Enabled})
 }
 
 // ---------- deployments ----------

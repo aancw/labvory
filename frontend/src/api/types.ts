@@ -400,6 +400,13 @@ export interface ServiceEndpoint {
   port?: number | null
   url: string
   is_external: boolean
+
+  // Observed health-check state (scheduler-written).
+  health_enabled: boolean
+  last_checked_at?: string | null
+  last_status?: number | null
+  last_latency_ms?: number | null
+  last_error: string
 }
 
 export interface ServiceDeployment {
@@ -429,6 +436,7 @@ export interface DashboardStatsV2 extends DashboardStats {
     ip_conflicts: number
     warranty_expiring: number
     services_without_host: number
+    services_down: number
   }
 }
 

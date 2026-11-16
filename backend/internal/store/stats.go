@@ -55,6 +55,7 @@ type AlertsSummary struct {
 	IPConflicts         int `json:"ip_conflicts"`
 	WarrantyExpiring    int `json:"warranty_expiring"`
 	ServicesWithoutHost int `json:"services_without_host"`
+	ServicesDown        int `json:"services_down"`
 }
 
 // AssetStub is a lightweight asset reference for lists.
@@ -152,10 +153,15 @@ func (s *Stats) Summary(ctx context.Context) (DashboardStats, error) {
 	if noHost, err = svc.CountWithoutDeployment(ctx); err != nil {
 		return out, err
 	}
+	var servicesDown int
+	if servicesDown, err = svc.CountEndpointsDown(ctx); err != nil {
+		return out, err
+	}
 	out.Alerts = AlertsSummary{
 		IPConflicts:         out.Network.IPConflicts,
 		WarrantyExpiring:    warranty,
 		ServicesWithoutHost: noHost,
+		ServicesDown:        servicesDown,
 	}
 	return out, nil
 }
