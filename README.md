@@ -73,6 +73,28 @@ What compose gives you:
 | `backend`| built from source   | REST API, runs migrations on boot               |
 | `frontend`| built from source  | nginx serving the SPA + proxying `/api`         |
 
+### ARP scan deployment (LAN Layer-2 discovery)
+
+The **ARP scan** connector sweeps the **active interface's subnet** in-process (gopacket — no
+external binary) and registers everything automatically: devices become **Discovered Device**
+assets (one per MAC, updated in place) and their IPs are recorded in IPAM — the subnet is
+auto-created when none matches. Raw packet access is required:
+
+- **Linux**: `NET_RAW` — the compose file already grants it, and the image sets the file
+  capability on the binary. For LAN reachability from Docker, start with the macvlan override
+  and set the connector interface to `eth1` (the default route stays on the compose bridge):
+
+  ```bash
+  cd deploy
+  # .env: ARP_PARENT (host LAN interface), ARP_SUBNET, ARP_GATEWAY,
+  #       ARP_CONTAINER_IP (a FREE LAN IP — reserve it)
+  docker compose -f docker-compose.yml -f docker-compose.arp.yml up -d --build
+  ```
+- **macOS**: BPF devices are root-only; run the backend as root or loosen the devices once
+  (`sudo chmod g+rw /dev/bpf*` — resets on reboot). Empty interface = the default-route one.
+- **table** mode (no privileges) only lists neighbors the host has talked to — and note that
+  macOS may deny spawned helper processes the neighbor table entirely; prefer the sweep there.
+
 ## Development
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the hot-reload workflow (Go server + Vite dev

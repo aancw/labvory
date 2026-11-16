@@ -208,14 +208,19 @@ func (s *Integrations) UpsertDiscoveredAsset(ctx context.Context, in DiscoveredA
 	}
 
 	if found {
+		// The name follows the best-known identity only while it still holds
+		// the default (external value): operator renames always survive, while
+		// default-named assets pick up richer names (e.g. reverse DNS).
 		_, err = tx.Exec(ctx, `
 			UPDATE assets SET
+				name = (CASE WHEN name = $8 THEN $9 ELSE name END),
 				hostname = $2, os_name = $3, os_version = $4,
 				cpu_cores = $5, ram_gb = $6,
 				metadata = $7,
 				updated_at = now()
 			WHERE id = $1`,
-			existingID, in.Hostname, in.OSName, in.OSVersion, in.CPUCores, in.RamGB, mergedMeta)
+			existingID, in.Hostname, in.OSName, in.OSVersion, in.CPUCores, in.RamGB, mergedMeta,
+			in.ExternalValue, in.Name)
 		if err != nil {
 			return "", false, err
 		}

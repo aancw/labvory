@@ -1,0 +1,40 @@
+# ARP-scan override: attaches the backend to your LAN via macvlan so the
+# "ARP scan" connector can reach physical devices with raw ARP requests.
+#
+#   cd deploy && cp .env.example .env   (already done)
+#   # add to .env:
+#   #   ARP_PARENT=eth0                     # LAN-facing interface on the docker host
+#   #   ARP_SUBNET=192.168.1.0/24           # your LAN
+#   #   ARP_GATEWAY=192.168.1.1             # your router
+#   #   ARP_CONTAINER_IP=192.168.1.250      # a FREE IP on your LAN (reserve it!)
+#   docker compose -f docker-compose.yml -f docker-compose.arp.yml up -d --build
+#
+# Then in the UI, configure the ARP scan connector with mode "arp-scan" and
+# interface "eth1" (the macvlan interface; eth0 stays on the compose network).
+#
+# Notes:
+# - Everything else keeps working unchanged: the web UI/API ports are still
+#   published over the compose network, and the backend still reaches `db`.
+# - The container's macvlan IP must not collide with any device on your LAN
+#   (exclude it from your DHCP pool). The host itself cannot talk to the
+#   macvlan interface directly — that is a macvlan limitation and does not
+#   affect the API, which is reached through the compose network.
+# - macvlan needs an ETHERNET parent. It does not work through Wi-Fi, and it
+#   does not work through Docker Desktop (macOS/Windows) — there, run the
+#   backend as a native binary on the host instead (see README).
+services:
+  backend:
+    networks:
+      default: {}
+      lan:
+        ipv4_address: ${ARP_CONTAINER_IP:-192.168.1.250}
+
+networks:
+  lan:
+    driver: macvlan
+    driver_opts:
+      parent: ${ARP_PARENT:-eth0}
+    ipam:
+      config:
+        - subnet: ${ARP_SUBNET:-192.168.1.0/24}
+          gateway: ${ARP_GATEWAY:-192.168.1.1}

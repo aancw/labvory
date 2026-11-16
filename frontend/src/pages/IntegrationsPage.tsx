@@ -48,7 +48,7 @@ const KIND_META: Record<string, { label: string; icon: typeof ServerIcon; descri
   cloudflare: { label: "Cloudflare", icon: CloudIcon, description: "Imports the account's zones as domains and syncs their DNS records. Needs an API token with Zone:Read + DNS:Read." },
   kubernetes: { label: "Kubernetes", icon: BoxesIcon, description: "Imports cluster nodes and pods as assets and Services into the service registry. Uses kubeconfig, an API token, or the in-cluster service account." },
   adguard: { label: "AdGuard Home", icon: ShieldCheckIcon, description: "Imports DNS rewrites for local addresses as observed records (declared values are never overwritten) and marks client IPs as seen on matching IP allocations." },
-  arp: { label: "ARP scan", icon: RadarIcon, description: "Reads Layer-2 neighbors (ip ↔ mac) from the local ARP table or an arp-scan sweep. IPs are marked as seen on matching allocations; MACs matching an asset interface record the sighting on the asset." },
+  arp: { label: "ARP scan", icon: RadarIcon, description: "Sweeps the active interface's subnet in-process (gopacket) — discovered devices are imported automatically as Discovered Device assets and their IPs registered (subnet auto-created when none matches). Table mode only reads the local ARP cache." },
 }
 
 export function IntegrationsPage() {
@@ -109,7 +109,9 @@ export function IntegrationsPage() {
               }
               onToggleHistory={() => setHistoryFor(historyFor === integ.id ? null : integ.id)}
               historyOpen={historyFor === integ.id}
-              syncing={sync.isPending}
+              // isPending is shared across the page's single mutation instance —
+              // key it to the clicked integration so only its card shows progress.
+              syncing={sync.isPending && sync.variables === integ.id}
             />
           ))}
         </div>
@@ -318,7 +320,7 @@ function IntegrationDialog({
   const [k8sToken, setK8sToken] = useState("")
   const [adguardUsername, setAdguardUsername] = useState("")
   const [adguardPassword, setAdguardPassword] = useState("")
-  const [arpMode, setArpMode] = useState<"table" | "scan">("table")
+  const [arpMode, setArpMode] = useState<"table" | "scan">("scan")
   const [arpInterface, setArpInterface] = useState("")
   const [arpCidr, setArpCidr] = useState("")
   const [enabled, setEnabled] = useState(true)
@@ -711,26 +713,29 @@ function IntegrationDialog({
                   value={arpMode}
                   onChange={(e) => setArpMode(e.target.value as "table" | "scan")}
                 >
+                  <option value="scan">ARP sweep — active in-process scan (gopacket)</option>
                   <option value="table">ARP table — read the local cache (no privileges)</option>
-                  <option value="scan">arp-scan — active sweep (needs the binary + NET_RAW)</option>
                 </select>
               </div>
               {arpMode === "scan" ? (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="int-arp-iface">Interface</Label>
-                    <Input id="int-arp-iface" className="font-mono text-xs" placeholder="eth0 (empty = default route)"
+                    <Input id="int-arp-iface" className="font-mono text-xs" placeholder="en0 / eth0 (empty = active interface via default route)"
                       value={arpInterface} onChange={(e) => setArpInterface(e.target.value)} />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="int-arp-cidr">CIDR</Label>
-                    <Input id="int-arp-cidr" className="font-mono text-xs" placeholder="192.168.1.0/24 (empty = local subnet)"
+                    <Input id="int-arp-cidr" className="font-mono text-xs" placeholder="192.168.1.0/24 (empty = interface subnet)"
                       value={arpCidr} onChange={(e) => setArpCidr(e.target.value)} />
                   </div>
                   <p className="col-span-2 text-xs text-muted-foreground">
-                    arp-scan needs root/NET_RAW on the server host. When Lanvory runs in Docker, scanning the LAN
-                    additionally requires <span className="font-mono">network_mode: host</span> — the compose file already
-                    grants NET_RAW. The table mode works everywhere but only shows neighbors the host has talked to.
+                    The sweep runs in-process (gopacket) — no external binary — and needs raw packet access:
+                    Linux <span className="font-mono">NET_RAW</span> (compose grants it — for LAN reachability use the
+                    macvlan override <span className="font-mono">docker-compose.arp.yml</span>); macOS needs root or BPF
+                    access (<span className="font-mono">sudo chmod g+rw /dev/bpf*</span>). Discovered devices become
+                    Discovered Device assets and their IPs are registered automatically (the subnet is auto-created
+                    when none matches). In Docker, set the interface to the LAN-facing one (macvlan: <span className="font-mono">eth1</span>).
                   </p>
                 </div>
               ) : null}
