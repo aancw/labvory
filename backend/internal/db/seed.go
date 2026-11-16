@@ -42,10 +42,10 @@ func SeedDevHomelab(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger
 
 	type seedAsset struct {
 		name, hostname, typeSlug, status, environment, manufacturer, model, os, osVersion string
-		cores int
-		ram float64
-		parent string // name of parent seed asset
-		observed string
+		cores                                                                             int
+		ram                                                                               float64
+		parent                                                                            string // name of parent seed asset
+		observed                                                                          string
 	}
 	seedAssets := []seedAsset{
 		{name: "opnsense", hostname: "opnsense.lab", typeSlug: "firewall", status: "online", environment: "production", manufacturer: "Protectli", model: "VP4650", os: "OPNsense", osVersion: "25.7", cores: 4, ram: 16, observed: "online"},
@@ -101,7 +101,10 @@ func SeedDevHomelab(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger
 	}
 
 	// VLANs.
-	vlans := []struct{ vid int; name, purpose string }{
+	vlans := []struct {
+		vid           int
+		name, purpose string
+	}{
 		{1, "Management", "management"}, {10, "Servers", "servers"},
 		{20, "Trusted clients", "clients"}, {30, "IoT", "iot"}, {40, "Guest", "guest"},
 	}
@@ -120,7 +123,7 @@ func SeedDevHomelab(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger
 	// Subnets + allocations.
 	seedSubnets := []struct {
 		cidr, name, vlanName, gateway string
-		allocs []struct{ ip, status, hostname, desc string }
+		allocs                        []struct{ ip, status, hostname, desc string }
 	}{
 		{cidr: "10.10.10.0/24", name: "Management", vlanName: "Management", gateway: "10.10.10.1", allocs: []struct{ ip, status, hostname, desc string }{
 			{"10.10.10.5", "assigned", "opnsense", "LAN gateway interface"},
@@ -188,8 +191,8 @@ func SeedDevHomelab(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger
 	// Services.
 	seedServices := []struct {
 		name, category, deployType string
-		url string
-		hosts []string
+		url                        string
+		hosts                      []string
 	}{
 		{name: "Pi-hole", category: "network", deployType: "lxc", url: "http://pihole.lab/admin", hosts: []string{"lxc-pihole"}},
 		{name: "Home Assistant", category: "home-automation", deployType: "vm", url: "http://ha.lab:8123", hosts: []string{"vm-homeassistant"}},

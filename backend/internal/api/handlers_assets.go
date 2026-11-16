@@ -15,9 +15,9 @@ import (
 )
 
 var (
-	uuidRe  = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
-	nameRe  = regexp.MustCompile(`^[\w .\-()/@:+]{1,100}$`)
-	macRe   = regexp.MustCompile(`^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$`)
+	uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	nameRe = regexp.MustCompile(`^[\w .\-()/@:+]{1,100}$`)
+	macRe  = regexp.MustCompile(`^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$`)
 )
 
 var assetStatuses = setOf("online", "offline", "maintenance", "retired", "unknown")
@@ -155,7 +155,9 @@ type httpxError struct {
 	msg    string
 }
 
-func errInvalid(code, msg string) *httpxError { return &httpxError{http.StatusUnprocessableEntity, code, msg} }
+func errInvalid(code, msg string) *httpxError {
+	return &httpxError{http.StatusUnprocessableEntity, code, msg}
+}
 
 func (e *httpxError) write(rc reqCtx) {
 	httpx.Error(rc.w, rc.r, e.status, e.code, e.msg, nil)
@@ -200,7 +202,7 @@ func payloadToAsset(p assetPayload) store.Asset {
 		CPUCores: p.CPUCores, RamGB: p.RamGB, StorageGB: p.StorageGB,
 		PurchaseDate: emptyToNil(p.PurchaseDate), PurchaseCost: p.PurchaseCost,
 		WarrantyExpires: emptyToNil(p.WarrantyExpires),
-		Notes: p.Notes, Source: "manual",
+		Notes:           p.Notes, Source: "manual",
 		Metadata: p.Metadata,
 	}
 }
@@ -397,10 +399,10 @@ func (s *Server) handleDeleteAsset(w http.ResponseWriter, r *http.Request) {
 // ---------- bulk operations ----------
 
 type bulkRequest struct {
-	Action   string   `json:"action"`
-	IDs      []string `json:"ids"`
-	Status   string   `json:"status,omitempty"`
-	Env      string   `json:"environment,omitempty"`
+	Action string   `json:"action"`
+	IDs    []string `json:"ids"`
+	Status string   `json:"status,omitempty"`
+	Env    string   `json:"environment,omitempty"`
 }
 
 func (s *Server) handleBulkAssets(w http.ResponseWriter, r *http.Request) {

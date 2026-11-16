@@ -20,10 +20,10 @@ import (
 
 // ProxmoxClient talks to a Proxmox VE API with a read-only API token.
 type ProxmoxClient struct {
-	baseURL    string
-	tokenID    string
+	baseURL     string
+	tokenID     string
 	tokenSecret string
-	http       *http.Client
+	http        *http.Client
 }
 
 func NewProxmoxClient(endpoint, tokenID, tokenSecret string, verifyTLS bool) *ProxmoxClient {
@@ -119,7 +119,7 @@ func SyncProxmox(ctx context.Context, pool *pgxpool.Pool, integ store.Integratio
 			OSName: "Proxmox VE", Source: "proxmox",
 			ExternalKey: "node", ExternalValue: node.Node,
 			Metadata: map[string]any{
-				"proxmox": map[string]any{"node": node.Node, "value": node.Node},
+				"proxmox":  map[string]any{"node": node.Node, "value": node.Node},
 				"observed": map[string]any{"status": node.Status, "checked_at": time.Now().UTC().Format(time.RFC3339)},
 			},
 		})
@@ -134,12 +134,12 @@ func SyncProxmox(ctx context.Context, pool *pgxpool.Pool, integ store.Integratio
 
 		// Guests: QEMU VMs.
 		var vms []struct {
-			VMID    int    `json:"vmid"`
-			Name    string `json:"name"`
-			Status  string `json:"status"`
-			MaxMem  int64  `json:"maxmem"`
-			MaxCPU  int    `json:"maxcpu"`
-			Template int   `json:"template"`
+			VMID     int    `json:"vmid"`
+			Name     string `json:"name"`
+			Status   string `json:"status"`
+			MaxMem   int64  `json:"maxmem"`
+			MaxCPU   int    `json:"maxcpu"`
+			Template int    `json:"template"`
 		}
 		if err := client.get(ctx, "/api2/json/nodes/"+node.Node+"/qemu", &vms); err != nil {
 			return nil, fmt.Errorf("qemu %s: %w", node.Node, err)
@@ -154,7 +154,7 @@ func SyncProxmox(ctx context.Context, pool *pgxpool.Pool, integ store.Integratio
 				ExternalKey: "vmid", ExternalValue: strconv.Itoa(vm.VMID),
 				CPUCores: intPtr(vm.MaxCPU), RamGB: float64Ptr(bytesToGB(vm.MaxMem)),
 				Metadata: map[string]any{
-					"proxmox": map[string]any{"vmid": vm.VMID, "node": node.Node, "value": strconv.Itoa(vm.VMID)},
+					"proxmox":  map[string]any{"vmid": vm.VMID, "node": node.Node, "value": strconv.Itoa(vm.VMID)},
 					"observed": map[string]any{"status": vm.Status, "checked_at": time.Now().UTC().Format(time.RFC3339)},
 				},
 			}, nodeAssetID); err != nil {
@@ -187,7 +187,7 @@ func SyncProxmox(ctx context.Context, pool *pgxpool.Pool, integ store.Integratio
 				ExternalKey: "vmid", ExternalValue: strconv.Itoa(ct.VMID),
 				CPUCores: intPtr(ct.MaxCPU), RamGB: float64Ptr(bytesToGB(ct.MaxMem)),
 				Metadata: map[string]any{
-					"proxmox": map[string]any{"vmid": ct.VMID, "node": node.Node, "value": strconv.Itoa(ct.VMID)},
+					"proxmox":  map[string]any{"vmid": ct.VMID, "node": node.Node, "value": strconv.Itoa(ct.VMID)},
 					"observed": map[string]any{"status": ct.Status, "checked_at": time.Now().UTC().Format(time.RFC3339)},
 				},
 			}, nodeAssetID)

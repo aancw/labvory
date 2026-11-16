@@ -11,14 +11,14 @@ import (
 
 // Domain is a DNS zone/apex owned by the operator (e.g. example.com).
 type Domain struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	Registrar   string  `json:"registrar"`
-	ExpiresOn   *string `json:"expires_on,omitempty"`
-	Notes       string  `json:"notes"`
-	Subdomains  int     `json:"subdomain_count"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Registrar  string    `json:"registrar"`
+	ExpiresOn  *string   `json:"expires_on,omitempty"`
+	Notes      string    `json:"notes"`
+	Subdomains int       `json:"subdomain_count"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 // Subdomain is one DNS record under a domain. Declared values (Value) are

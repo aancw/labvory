@@ -28,14 +28,14 @@ func ValidTokenPurpose(p string) bool {
 // APIToken is a bearer credential for machine clients (MCP agents, scripts).
 // Tokens are stored hashed; the plaintext is returned only at creation.
 type APIToken struct {
-	ID          string     `json:"id"`
-	UserID      string     `json:"user_id"`
-	Name        string     `json:"name"`
-	TokenHash   string     `json:"-"`
-	Purpose     string     `json:"purpose"`
-	CreatedAt   time.Time  `json:"created_at"`
-	LastUsedAt  *time.Time `json:"last_used_at,omitempty"`
-	RevokedAt   *time.Time `json:"revoked_at,omitempty"`
+	ID         string     `json:"id"`
+	UserID     string     `json:"user_id"`
+	Name       string     `json:"name"`
+	TokenHash  string     `json:"-"`
+	Purpose    string     `json:"purpose"`
+	CreatedAt  time.Time  `json:"created_at"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
 }
 
 // APITokenCreated pairs the stored token with the one-time plaintext.

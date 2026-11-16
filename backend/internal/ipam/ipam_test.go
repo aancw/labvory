@@ -38,8 +38,8 @@ func TestUsableCount(t *testing.T) {
 	}{
 		{"10.0.0.0/24", 254},
 		{"10.0.0.0/30", 2},
-		{"10.0.0.0/31", 2},  // RFC 3021 point-to-point
-		{"10.0.0.0/32", 1},  // single host
+		{"10.0.0.0/31", 2}, // RFC 3021 point-to-point
+		{"10.0.0.0/32", 1}, // single host
 		{"10.0.0.0/23", 510},
 		{"10.0.0.0/1", math.MaxUint64 >> 0}, // saturates (2^31-2 < MaxUint64 actually)
 		{"2001:db8::/64", math.MaxUint64},   // saturate: 2^64

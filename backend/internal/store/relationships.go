@@ -12,17 +12,17 @@ import (
 // AssetRelationship is a typed, directional edge between two assets. Physical
 // connections may carry interface and port metadata (topology rendering).
 type AssetRelationship struct {
-	ID        string    `json:"id"`
-	SourceID  string    `json:"source_asset_id"`
-	TargetID  string    `json:"target_asset_id"`
-	Kind      string    `json:"kind"`
-	Note      string    `json:"note"`
+	ID                string  `json:"id"`
+	SourceID          string  `json:"source_asset_id"`
+	TargetID          string  `json:"target_asset_id"`
+	Kind              string  `json:"kind"`
+	Note              string  `json:"note"`
 	SourceInterfaceID *string `json:"source_interface_id,omitempty"`
 	TargetInterfaceID *string `json:"target_interface_id,omitempty"`
-	SourcePort string   `json:"source_port"`
-	TargetPort string   `json:"target_port"`
+	SourcePort        string  `json:"source_port"`
+	TargetPort        string  `json:"target_port"`
 	// Direction relative to the asset the relationship was listed for.
-	Direction string `json:"direction"` // "outgoing" | "incoming"
+	Direction string    `json:"direction"` // "outgoing" | "incoming"
 	Other     AssetStub `json:"other_asset"`
 	CreatedAt time.Time `json:"created_at"`
 }

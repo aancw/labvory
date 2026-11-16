@@ -30,8 +30,8 @@ func (s *Server) handleExportInventory(w http.ResponseWriter, r *http.Request) {
 type importPreviewRequest struct {
 	Entity string `json:"entity"` // assets | subnets | ip_addresses
 	// Scope for subnet/IP imports.
-	ContextID string `json:"context_id"`
-	SubnetID  string `json:"subnet_id"`
+	ContextID string           `json:"context_id"`
+	SubnetID  string           `json:"subnet_id"`
 	Rows      []map[string]any `json:"rows"`
 }
 

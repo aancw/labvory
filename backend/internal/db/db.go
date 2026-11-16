@@ -11,8 +11,8 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres" // registers the "postgres" migrate driver
 	"github.com/golang-migrate/migrate/v4/source/iofs"
-	_ "github.com/lib/pq" // database/sql driver used by the migrate postgres driver
 	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/lib/pq" // database/sql driver used by the migrate postgres driver
 )
 
 //go:embed migrations/*.sql

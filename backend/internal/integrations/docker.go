@@ -75,7 +75,7 @@ func SyncDocker(ctx context.Context, pool *pgxpool.Pool, integ store.Integration
 			ExternalKey: "container_id", ExternalValue: c.ID[:12],
 			OSName: c.Image,
 			Metadata: map[string]any{
-				"docker": map[string]any{"container_id": c.ID[:12], "image": c.Image, "value": c.ID[:12]},
+				"docker":   map[string]any{"container_id": c.ID[:12], "image": c.Image, "value": c.ID[:12]},
 				"observed": map[string]any{"status": c.State, "checked_at": now},
 			},
 		})

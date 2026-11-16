@@ -19,20 +19,20 @@ func diffMap(before, after store.Asset) map[string]any {
 		to   any
 	}
 	fields := map[string]pair{
-		"name": {before.Name, after.Name},
-		"hostname": {before.Hostname, after.Hostname},
-		"status": {before.Status, after.Status},
-		"lifecycle": {before.Lifecycle, after.Lifecycle},
-		"environment": {before.Environment, after.Environment},
-		"location": {before.LocationName, after.LocationName},
-		"parent": {before.ParentName, after.ParentName},
-		"manufacturer": {before.Manufacturer, after.Manufacturer},
-		"model": {before.Model, after.Model},
+		"name":          {before.Name, after.Name},
+		"hostname":      {before.Hostname, after.Hostname},
+		"status":        {before.Status, after.Status},
+		"lifecycle":     {before.Lifecycle, after.Lifecycle},
+		"environment":   {before.Environment, after.Environment},
+		"location":      {before.LocationName, after.LocationName},
+		"parent":        {before.ParentName, after.ParentName},
+		"manufacturer":  {before.Manufacturer, after.Manufacturer},
+		"model":         {before.Model, after.Model},
 		"serial_number": {before.SerialNumber, after.SerialNumber},
-		"os_name": {before.OSName, after.OSName},
-		"os_version": {before.OSVersion, after.OSVersion},
-		"cpu_model": {before.CPUModel, after.CPUModel},
-		"notes": {before.Notes, after.Notes},
+		"os_name":       {before.OSName, after.OSName},
+		"os_version":    {before.OSVersion, after.OSVersion},
+		"cpu_model":     {before.CPUModel, after.CPUModel},
+		"notes":         {before.Notes, after.Notes},
 	}
 	num := func(a, b *float64) (any, any) {
 		if a == nil && b == nil {
@@ -89,12 +89,12 @@ func scalarEqual(a, b any) bool {
 // ---------- network interfaces ----------
 
 type interfacePayload struct {
-	Name      string  `json:"name"`
-	Kind      string  `json:"kind"`
+	Name       string  `json:"name"`
+	Kind       string  `json:"kind"`
 	MACAddress *string `json:"mac_address"`
-	MTU       *int    `json:"mtu"`
-	SpeedMbps *int    `json:"speed_mbps"`
-	Notes     string  `json:"notes"`
+	MTU        *int    `json:"mtu"`
+	SpeedMbps  *int    `json:"speed_mbps"`
+	Notes      string  `json:"notes"`
 }
 
 func (s *Server) validateInterfacePayload(p *interfacePayload) *httpxError {

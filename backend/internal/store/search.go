@@ -19,11 +19,11 @@ type SearchResults struct {
 
 // SearchHit is one result row.
 type SearchHit struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Subtitle    string `json:"subtitle"`
-	EntityType  string `json:"entity_type"`
-	Icon        string `json:"icon"`
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Subtitle   string `json:"subtitle"`
+	EntityType string `json:"entity_type"`
+	Icon       string `json:"icon"`
 }
 
 type Search struct{ pool *pgxpool.Pool }

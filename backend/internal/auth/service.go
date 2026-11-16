@@ -28,10 +28,10 @@ var (
 
 // Service implements authentication workflows on top of the store.
 type Service struct {
-	users     *store.Users
-	sessions  *store.Sessions
-	audit     *store.AuditEvents
-	logger    *slog.Logger
+	users      *store.Users
+	sessions   *store.Sessions
+	audit      *store.AuditEvents
+	logger     *slog.Logger
 	sessionTTL time.Duration
 }
 
@@ -100,7 +100,7 @@ func (s *Service) CreateAdmin(ctx context.Context, username, displayName, passwo
 
 // SessionToken is the plaintext session token to store in the cookie.
 type SessionToken struct {
-	Token    string
+	Token     string
 	ExpiresAt time.Time
 }
 

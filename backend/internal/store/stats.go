@@ -37,24 +37,24 @@ type NetworkSummary struct {
 
 // DashboardStats is the full dashboard payload.
 type DashboardStats struct {
-	Assets      AssetSummary   `json:"assets"`
-	Network     NetworkSummary `json:"network"`
-	Services    int            `json:"services"`
-	Locations   int            `json:"locations"`
-	Tags        int            `json:"tags"`
-	Recent      []AuditEvent   `json:"recent_activity"`
-	UpdatedRecently []AssetStub `json:"recently_updated_assets"`
-	ByOS        []map[string]any `json:"by_os"`
-	ServicesByHost  []map[string]any `json:"services_by_host"`
+	Assets            AssetSummary     `json:"assets"`
+	Network           NetworkSummary   `json:"network"`
+	Services          int              `json:"services"`
+	Locations         int              `json:"locations"`
+	Tags              int              `json:"tags"`
+	Recent            []AuditEvent     `json:"recent_activity"`
+	UpdatedRecently   []AssetStub      `json:"recently_updated_assets"`
+	ByOS              []map[string]any `json:"by_os"`
+	ServicesByHost    []map[string]any `json:"services_by_host"`
 	SubnetUtilization []map[string]any `json:"subnet_utilization"`
-	Alerts      AlertsSummary   `json:"alerts"`
+	Alerts            AlertsSummary    `json:"alerts"`
 }
 
 // AlertsSummary surfaces actionable infrastructure conditions.
 type AlertsSummary struct {
-	IPConflicts            int `json:"ip_conflicts"`
-	WarrantyExpiring       int `json:"warranty_expiring"`
-	ServicesWithoutHost    int `json:"services_without_host"`
+	IPConflicts         int `json:"ip_conflicts"`
+	WarrantyExpiring    int `json:"warranty_expiring"`
+	ServicesWithoutHost int `json:"services_without_host"`
 }
 
 // AssetStub is a lightweight asset reference for lists.

@@ -15,14 +15,14 @@ type TopologyGraph struct {
 }
 
 type TopologyNode struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Hostname string `json:"hostname"`
-	Category string `json:"category"`
-	TypeSlug string `json:"type_slug"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Hostname  string `json:"hostname"`
+	Category  string `json:"category"`
+	TypeSlug  string `json:"type_slug"`
 	TypeLabel string `json:"type_label"`
-	Status   string `json:"status"`
-	ParentID string `json:"parent_id,omitempty"`
+	Status    string `json:"status"`
+	ParentID  string `json:"parent_id,omitempty"`
 	PrimaryIP string `json:"primary_ip,omitempty"`
 }
 
