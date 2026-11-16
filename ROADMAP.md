@@ -70,11 +70,19 @@ infrastructure; deleting an asset is blocked or cascades only per explicit rules
 atomic; exported JSON re-imports losslessly; topology renders parent-child collapse and persists
 layout.
 
-## Phase 6 — Integrations ✅ (shipped: Proxmox, Docker, ICMP; SNMP/SSH/UniFi/OPNsense/DNS designed, not implemented)
+## Phase 6 — Integrations ✅ (shipped: Proxmox, Docker, ICMP, DNS, Cloudflare, Kubernetes, AdGuard Home, ARP scan; SNMP/SSH/UniFi/OPNsense designed, not implemented)
 
 - Proxmox VE (read-only API token): import nodes/VMs/LXCs, sync CPU/RAM/storage, last-sync display,
   manual metadata preserved, source attribution on imported fields.
 - Docker Engine API discovery; opt-in ICMP reachability; sync history per integration.
+- Kubernetes (kubeconfig, API token, or in-cluster): nodes and pods as assets, Services into the
+  service registry.
+- DNS enumeration (AXFR zone transfer or crt.name certificate transparency) and Cloudflare (zones +
+  records): observed DNS records under declared domains, declared values never overwritten.
+- AdGuard Home: local DNS rewrites imported as observed records; client IPs marked as seen on
+  matching allocations.
+- ARP scan: in-process gopacket sweep of the active interface — devices become Discovered Device
+  assets and their IPs are registered automatically (the subnet is auto-created when none matches).
 - Discovery opt-in with explicit scope allowlists; observed vs. declared state distinguished;
   secrets encrypted at rest, never returned in API responses.
 

@@ -9,8 +9,9 @@ homelab operator.
 
 > **Status: feature-complete (Phases 1–6).** Asset inventory with parent/child hosting, IPAM with
 > address grid and assignment history, service registry, network topology, CSV/JSON import/export,
-> and read-only Proxmox/Docker/ICMP integrations are implemented. Remaining "planned" connectors
-> (SNMP, SSH, UniFi, OPNsense, DNS) are explicitly labeled in the UI — never faked.
+> and read-only integrations (Proxmox, Docker, Kubernetes, ICMP, DNS, Cloudflare, AdGuard Home,
+> ARP scan) are implemented. Remaining "planned" connectors (SNMP, SSH, UniFi, OPNsense) are
+> explicitly labeled in the UI — never faked.
 
 ---
 
@@ -30,9 +31,10 @@ homelab operator.
 - **Data portability** — CSV import with column mapping + row-level preview, transactional commit,
   JSON inventory export and idempotent restore.
 - **Integrations** — read-only Proxmox (nodes/VMs/LXC), Docker, Kubernetes (nodes, pods, Services),
-  DNS (AXFR + crt.name certificate transparency) and Cloudflare (zones + DNS records) syncs, opt-in
-  ICMP checks; secrets encrypted at rest (AES-256-GCM), observed state kept separate from declared
-  inventory.
+  DNS (AXFR + crt.name certificate transparency), Cloudflare (zones + DNS records), AdGuard Home
+  (local rewrites + client observations) and ARP scan (gopacket sweep → Discovered Devices +
+  automatic IPAM registration) syncs, opt-in ICMP checks; secrets encrypted at rest (AES-256-GCM),
+  observed state kept separate from declared inventory.
 - **Agent access (MCP)** — a Model Context Protocol server at `/mcp` (streamable HTTP, Bearer
   tokens) exposing full CRUD over inventory data to agents; DB-backed, revocable API tokens.
   See [docs/MCP.md](docs/MCP.md).
@@ -113,5 +115,5 @@ proxy), integration tests against a disposable PostgreSQL, and repository layout
 - Set `LV_COOKIE_SECURE=true` when serving over HTTPS behind your reverse proxy.
 - Login and setup endpoints are rate-limited per IP; audit events record security-relevant actions
   (logins, logouts, password changes, settings edits).
-- Service credentials must never be stored in Lanvory — integration secrets (Phase 6) will be
-  stored as references, not plaintext.
+- Service credentials must never be stored in Lanvory — integration secrets are stored encrypted
+  at rest (AES-256-GCM) and are never returned by the API.
