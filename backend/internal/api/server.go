@@ -212,12 +212,15 @@ func (s *Server) mountDataRoutes(r chi.Router) {
 			r.Get("/next-available", s.handleNextAvailable)
 			r.Post("/addresses", s.handleAllocateIP)
 			r.Post("/addresses/bulk", s.handleBulkIP)
+
 		})
 	})
 	r.Route("/ip-addresses", func(r chi.Router) {
 		r.Get("/", s.handleListIPs)
 		r.Put("/{ipID}", s.handleUpdateIP)
 		r.Delete("/{ipID}", s.handleDeleteIP)
+		r.Post("/release-bulk", s.handleReleaseIPsBulk)
+		r.Post("/delete-bulk", s.handleDeleteIPsBulk)
 		r.Post("/{ipID}/release", s.handleReleaseIP)
 		r.Get("/{ipID}/history", s.handleIPHistory)
 	})

@@ -522,6 +522,34 @@ export function useReleaseIP() {
   })
 }
 
+export function useReleaseIPsBulk() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      api.post<{ ok: boolean; released: number }>(`/api/v1/ip-addresses/release-bulk`, { ids }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["subnet"] })
+      void qc.invalidateQueries({ queryKey: ["subnet-grid"] })
+      void qc.invalidateQueries({ queryKey: ["subnets"] })
+      void qc.invalidateQueries({ queryKey: ["ips"] })
+    },
+  })
+}
+
+export function useDeleteIPsBulk() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      api.post<{ ok: boolean; deleted: number }>(`/api/v1/ip-addresses/delete-bulk`, { ids }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["subnet"] })
+      void qc.invalidateQueries({ queryKey: ["subnet-grid"] })
+      void qc.invalidateQueries({ queryKey: ["subnets"] })
+      void qc.invalidateQueries({ queryKey: ["ips"] })
+    },
+  })
+}
+
 export function useDeleteIP() {
   const qc = useQueryClient()
   return useMutation({

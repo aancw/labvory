@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/netip"
 	"strings"
@@ -497,20 +498,20 @@ func (s *Server) subnetsHistory(ctx context.Context, id string, limit int) ([]st
 // ---------- address grid & allocation ----------
 
 type gridCell struct {
-	Address string  `json:"address"`
-	Status  string  `json:"status"`
-	IPID    *string `json:"ip_id,omitempty"`
-	Hostname string `json:"hostname,omitempty"`
+	Address  string  `json:"address"`
+	Status   string  `json:"status"`
+	IPID     *string `json:"ip_id,omitempty"`
+	Hostname string  `json:"hostname,omitempty"`
 }
 
 type addressGrid struct {
-	CIDR       string     `json:"cidr"`
-	Usable     uint64     `json:"usable"`
-	First      string     `json:"first"`
-	Last       string     `json:"last"`
-	Cells      []gridCell `json:"cells"`
-	Truncated  bool       `json:"truncated"`
-	NextAvail  []string   `json:"next_available"`
+	CIDR      string     `json:"cidr"`
+	Usable    uint64     `json:"usable"`
+	First     string     `json:"first"`
+	Last      string     `json:"last"`
+	Cells     []gridCell `json:"cells"`
+	Truncated bool       `json:"truncated"`
+	NextAvail []string   `json:"next_available"`
 }
 
 // handleAddressGrid builds the interactive allocation view for a subnet.
@@ -593,14 +594,14 @@ func (s *Server) handleAddressGrid(w http.ResponseWriter, r *http.Request) {
 }
 
 type allocatePayload struct {
-	Address  string `json:"address"` // empty → auto-assign next available
-	Status   string `json:"status"`  // assigned | reserved | excluded
-	Method   string `json:"assignment_method"`
-	Hostname string `json:"hostname"`
+	Address     string `json:"address"` // empty → auto-assign next available
+	Status      string `json:"status"`  // assigned | reserved | excluded
+	Method      string `json:"assignment_method"`
+	Hostname    string `json:"hostname"`
 	Description string `json:"description"`
 	InterfaceID string `json:"interface_id"`
-	AssetID  string `json:"asset_id"`
-	Auto     bool   `json:"auto"`
+	AssetID     string `json:"asset_id"`
+	Auto        bool   `json:"auto"`
 }
 
 // handleAllocateIP implements the assign-a-new-address workflow.
@@ -935,11 +936,11 @@ func (s *Server) handleNextAvailable(w http.ResponseWriter, r *http.Request) {
 // ---------- bulk operations on addresses ----------
 
 type ipBulkPayload struct {
-	Action string `json:"action"` // reserve | exclude | release
-	Start  string `json:"start"`
-	End    string `json:"end"`   // inclusive; empty → single address (start)
-	Count  int    `json:"count"` // alternative to End
-	Hostname string `json:"hostname"`
+	Action      string `json:"action"` // reserve | exclude | release
+	Start       string `json:"start"`
+	End         string `json:"end"`   // inclusive; empty → single address (start)
+	Count       int    `json:"count"` // alternative to End
+	Hostname    string `json:"hostname"`
 	Description string `json:"description"`
 }
 
@@ -1077,4 +1078,70 @@ func (s *Server) handleListIPs(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"addresses": items, "total": total, "limit": limit, "offset": offset,
 	})
+}
+
+type ipIDsPayload struct {
+	IDs []string `json:"ids"`
+}
+
+// handleReleaseIPsBulk releases the selected addresses (any non-available
+// status) and closes their assignment history rows.
+func (s *Server) handleReleaseIPsBulk(w http.ResponseWriter, r *http.Request) {
+	var p ipIDsPayload
+	if err := httpx.DecodeJSON(r, &p); err != nil {
+		httpx.Error(w, r, http.StatusBadRequest, "invalid_request", err.Error(), nil)
+		return
+	}
+	if len(p.IDs) == 0 || len(p.IDs) > 1000 {
+		httpx.Error(w, r, http.StatusUnprocessableEntity, "invalid_request",
+			"Provide between 1 and 1000 address ids.", nil)
+		return
+	}
+	for _, id := range p.IDs {
+		if !isUUID(id) {
+			httpx.Error(w, r, http.StatusUnprocessableEntity, "invalid_request",
+				"Invalid address id in selection.", nil)
+			return
+		}
+	}
+	released, err := s.ipAddresses.ReleaseMany(r.Context(), p.IDs)
+	if err != nil {
+		s.logger.Error("bulk release failed", "error", err)
+		httpx.Error(w, r, http.StatusInternalServerError, "internal", "Bulk release failed.", nil)
+		return
+	}
+	s.auditChange(r, currentUser(r), "ip_address", "", fmt.Sprintf("%d addresses", released), "released_bulk",
+		map[string]any{"released": released, "ids": p.IDs})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "released": released})
+}
+
+// handleDeleteIPsBulk removes the selected tracked addresses (assignment
+// history cascades with the rows).
+func (s *Server) handleDeleteIPsBulk(w http.ResponseWriter, r *http.Request) {
+	var p ipIDsPayload
+	if err := httpx.DecodeJSON(r, &p); err != nil {
+		httpx.Error(w, r, http.StatusBadRequest, "invalid_request", err.Error(), nil)
+		return
+	}
+	if len(p.IDs) == 0 || len(p.IDs) > 1000 {
+		httpx.Error(w, r, http.StatusUnprocessableEntity, "invalid_request",
+			"Provide between 1 and 1000 address ids.", nil)
+		return
+	}
+	for _, id := range p.IDs {
+		if !isUUID(id) {
+			httpx.Error(w, r, http.StatusUnprocessableEntity, "invalid_request",
+				"Invalid address id in selection.", nil)
+			return
+		}
+	}
+	deleted, err := s.ipAddresses.DeleteMany(r.Context(), p.IDs)
+	if err != nil {
+		s.logger.Error("bulk delete failed", "error", err)
+		httpx.Error(w, r, http.StatusInternalServerError, "internal", "Bulk delete failed.", nil)
+		return
+	}
+	s.auditChange(r, currentUser(r), "ip_address", "", fmt.Sprintf("%d addresses", deleted), "deleted_bulk",
+		map[string]any{"deleted": deleted, "ids": p.IDs})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "deleted": deleted})
 }

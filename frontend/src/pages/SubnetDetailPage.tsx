@@ -15,7 +15,9 @@ import {
   useAllocateIP,
   useDeleteIP,
   useNextAvailable,
+  useDeleteIPsBulk,
   useReleaseIP,
+  useReleaseIPsBulk,
   useSubnet,
   useUpdateIP,
 } from "@/api/hooks"
@@ -24,13 +26,14 @@ import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { EmptyState } from "@/components/EmptyState"
 import { StatusBadge } from "@/components/StatusBadge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { cn } from "@/lib/utils"
+import { cn, formatRelative } from "@/lib/utils"
 import { SubnetFormFields, subnetPayload, type SubnetFormState } from "./SubnetsPage"
 import { UtilizationBar } from "./SubnetsPage"
 
@@ -149,7 +152,7 @@ export function SubnetDetailPage() {
             <span className="text-xs text-muted-foreground">Too large for the grid — use the table below.</span>
           ) : (
             <p className="text-xs text-muted-foreground tabular-nums">
-              {grid?.usable} usable · {grid?.first} – {grid?.last} · click an address to manage it
+              {allocatedCount} in use · {grid?.usable} usable · {grid?.first} – {grid?.last} · click an address to manage it
             </p>
           )}
         </CardHeader>
@@ -216,6 +219,9 @@ function AllocationsTable({ subnetId, addresses }: { subnetId: string; addresses
   const [qDraft, setQDraft] = useState("")
   const release = useReleaseIP()
   const remove = useDeleteIP()
+  const releaseBulk = useReleaseIPsBulk()
+  const deleteBulk = useDeleteIPsBulk()
+  const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const [q, setQ] = useState("")
   const filtered = addresses.filter(
@@ -224,6 +230,48 @@ function AllocationsTable({ subnetId, addresses }: { subnetId: string; addresses
       a.address.includes(q) ||
       a.hostname.toLowerCase().includes(q.toLowerCase()),
   )
+  const allSelected = filtered.length > 0 && filtered.every((ip) => selected.has(ip.id))
+  const toggleAll = () => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (allSelected) {
+        filtered.forEach((ip) => next.delete(ip.id))
+      } else {
+        filtered.forEach((ip) => next.add(ip.id))
+      }
+      return next
+    })
+  }
+  const toggleOne = (id: string, checked: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
+  const clearSelection = () => setSelected(new Set())
+  const runBulk = (action: "release" | "delete") => {
+    const ids = [...selected]
+    const onError = (err: unknown) => toast.error(isApiError(err) ? err.message : "Bulk operation failed.")
+    if (action === "release") {
+      releaseBulk.mutate(ids, {
+        onSuccess: (res) => {
+          toast.success(`Released ${res.released} address${res.released === 1 ? "" : "es"}.`)
+          clearSelection()
+        },
+        onError,
+      })
+    } else {
+      deleteBulk.mutate(ids, {
+        onSuccess: (res) => {
+          toast.success(`Deleted ${res.deleted} address${res.deleted === 1 ? "" : "es"}.`)
+          clearSelection()
+        },
+        onError,
+      })
+    }
+  }
 
   return (
     <Card>
@@ -242,6 +290,30 @@ function AllocationsTable({ subnetId, addresses }: { subnetId: string; addresses
         </div>
       </CardHeader>
       <CardContent>
+        {selected.size > 0 ? (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+            <span className="font-medium">{selected.size} selected</span>
+            <div className="flex-1" />
+            <Button variant="outline" size="sm" disabled={releaseBulk.isPending} onClick={() => runBulk("release")}>
+              Release selected
+            </Button>
+            <ConfirmDialog
+              trigger={
+                <Button variant="destructive" size="sm" disabled={deleteBulk.isPending}>
+                  Delete selected
+                </Button>
+              }
+              title={`Delete ${selected.size} tracked addresses?`}
+              description="The rows and their assignment history are removed. The subnet itself is kept."
+              confirmLabel="Delete selected"
+              onConfirm={() => runBulk("delete")}
+            />
+            <Button variant="ghost" size="sm" onClick={clearSelection}>
+              Clear
+            </Button>
+          </div>
+        ) : null}
+
         {filtered.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">No tracked addresses.</p>
         ) : (
@@ -249,18 +321,33 @@ function AllocationsTable({ subnetId, addresses }: { subnetId: string; addresses
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-8">
+                    <Checkbox
+                      checked={filtered.length > 0 && allSelected ? true : selected.size > 0 ? "indeterminate" : false}
+                      onCheckedChange={toggleAll}
+                      aria-label="Select all addresses"
+                    />
+                  </TableHead>
                   <TableHead>Address</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Method</TableHead>
                   <TableHead>Hostname</TableHead>
                   <TableHead>Asset</TableHead>
                   <TableHead>Description</TableHead>
+                  <TableHead>Last seen</TableHead>
                   <TableHead className="w-24" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((ip) => (
                   <TableRow key={ip.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selected.has(ip.id)}
+                        onCheckedChange={(v) => toggleOne(ip.id, v === true)}
+                        aria-label={`Select ${ip.address}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-mono text-xs">{ip.address}</TableCell>
                     <TableCell><StatusBadge status={ip.status} /></TableCell>
                     <TableCell className="text-muted-foreground">{ip.assignment_method ?? "—"}</TableCell>
@@ -273,6 +360,9 @@ function AllocationsTable({ subnetId, addresses }: { subnetId: string; addresses
                       ) : "—"}
                     </TableCell>
                     <TableCell className="max-w-xs truncate text-xs text-muted-foreground">{ip.description || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground" title={ip.last_observed_at ?? undefined}>
+                      {ip.last_observed_at ? formatRelative(ip.last_observed_at) : "—"}
+                    </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">
                         {ip.status !== "available" ? (

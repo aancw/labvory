@@ -174,33 +174,33 @@ func (s *Vlans) Delete(ctx context.Context, id string) error {
 // ---------- subnets ----------
 
 type Subnet struct {
-	ID           string          `json:"id"`
-	CIDR         string          `json:"cidr"`
-	Name         string          `json:"name"`
-	Description  string          `json:"description"`
-	ContextID    string          `json:"context_id"`
-	ContextName  string          `json:"context_name"`
-	VlanID       *string         `json:"vlan_id,omitempty"`
-	VlanName     *string         `json:"vlan_name,omitempty"`
-	VlanNumber   *int            `json:"vlan_number,omitempty"`
-	Gateway      *string         `json:"gateway,omitempty"`
-	DNSServers   []string        `json:"dns_servers"`
-	DHCPStart    *string         `json:"dhcp_start,omitempty"`
-	DHCPEnd      *string         `json:"dhcp_end,omitempty"`
-	LocationID   *string         `json:"location_id,omitempty"`
-	LocationName *string         `json:"location_name,omitempty"`
-	Environment  string          `json:"environment"`
+	ID           string   `json:"id"`
+	CIDR         string   `json:"cidr"`
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	ContextID    string   `json:"context_id"`
+	ContextName  string   `json:"context_name"`
+	VlanID       *string  `json:"vlan_id,omitempty"`
+	VlanName     *string  `json:"vlan_name,omitempty"`
+	VlanNumber   *int     `json:"vlan_number,omitempty"`
+	Gateway      *string  `json:"gateway,omitempty"`
+	DNSServers   []string `json:"dns_servers"`
+	DHCPStart    *string  `json:"dhcp_start,omitempty"`
+	DHCPEnd      *string  `json:"dhcp_end,omitempty"`
+	LocationID   *string  `json:"location_id,omitempty"`
+	LocationName *string  `json:"location_name,omitempty"`
+	Environment  string   `json:"environment"`
 	// Computed utilization.
-	UsableCount uint64         `json:"usable_count"`
-	Assigned    int            `json:"assigned"`
-	Reserved    int            `json:"reserved"`
-	Excluded    int            `json:"excluded"`
-	Conflicts   int            `json:"conflicts"`
-	Available   int            `json:"available"` // tracked rows still marked available
-	Utilization int            `json:"utilization"`
-	SubnetUsable bool          `json:"-"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	UsableCount  uint64    `json:"usable_count"`
+	Assigned     int       `json:"assigned"`
+	Reserved     int       `json:"reserved"`
+	Excluded     int       `json:"excluded"`
+	Conflicts    int       `json:"conflicts"`
+	Available    int       `json:"available"` // tracked rows still marked available
+	Utilization  int       `json:"utilization"`
+	SubnetUsable bool      `json:"-"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type Subnets struct{ pool *pgxpool.Pool }
@@ -418,20 +418,20 @@ func (s *Subnets) AllCIDRsInContext(ctx context.Context, contextID string, exclu
 // ---------- IP addresses ----------
 
 type IPAddress struct {
-	ID          string          `json:"id"`
-	SubnetID    string          `json:"subnet_id"`
-	SubnetCIDR  string          `json:"subnet_cidr,omitempty"`
-	Address     string          `json:"address"`
-	Status      string          `json:"status"`
-	Method      *string         `json:"assignment_method,omitempty"`
-	Hostname    string          `json:"hostname"`
-	Description string          `json:"description"`
-	InterfaceID *string         `json:"interface_id,omitempty"`
-	AssetID     *string         `json:"asset_id,omitempty"`
-	AssetName   *string         `json:"asset_name,omitempty"`
-	LastObservedAt *time.Time   `json:"last_observed_at,omitempty"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
+	ID             string     `json:"id"`
+	SubnetID       string     `json:"subnet_id"`
+	SubnetCIDR     string     `json:"subnet_cidr,omitempty"`
+	Address        string     `json:"address"`
+	Status         string     `json:"status"`
+	Method         *string    `json:"assignment_method,omitempty"`
+	Hostname       string     `json:"hostname"`
+	Description    string     `json:"description"`
+	InterfaceID    *string    `json:"interface_id,omitempty"`
+	AssetID        *string    `json:"asset_id,omitempty"`
+	AssetName      *string    `json:"asset_name,omitempty"`
+	LastObservedAt *time.Time `json:"last_observed_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
 type IPAddresses struct{ pool *pgxpool.Pool }
@@ -718,4 +718,45 @@ func (s *IPAddresses) History(ctx context.Context, ipID string) ([]map[string]an
 		})
 	}
 	return out, rows.Err()
+}
+
+// ReleaseMany marks the given addresses available (any non-available status)
+// and closes their active assignment history rows, mirroring the single-row
+// release. Already-available ids are ignored; returns the released count.
+func (s *IPAddresses) ReleaseMany(ctx context.Context, ids []string) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE ip_assignments SET released_at = now()
+		WHERE released_at IS NULL
+		  AND ip_address_id IN (SELECT id FROM ip_addresses
+		                         WHERE id = ANY($1::uuid[]) AND status <> 'available')`, ids)
+	if err != nil {
+		return 0, err
+	}
+	tag, err = s.pool.Exec(ctx, `
+		UPDATE ip_addresses SET status = 'available', assignment_method = NULL, updated_at = now()
+		WHERE id = ANY($1::uuid[]) AND status <> 'available'`, ids)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+// DeleteMany removes the given tracked addresses; assignment history cascades
+// with the rows.
+func (s *IPAddresses) DeleteMany(ctx context.Context, ids []string) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM ip_addresses WHERE id = ANY($1::uuid[])`, ids)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+// DeleteAllForSubnet removes every tracked address of the subnet; assignment
+// history cascades with the rows.
+func (s *IPAddresses) DeleteAllForSubnet(ctx context.Context, subnetID string) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM ip_addresses WHERE subnet_id = $1`, subnetID)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }
