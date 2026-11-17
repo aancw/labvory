@@ -10,6 +10,7 @@ lanvory-server
 # Environment
 .env
 deploy/.env
+deploy/*.dump
 
 # OS
 .DS_Store

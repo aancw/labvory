@@ -19,6 +19,10 @@ WEB_PORT     ?= 4173
 DB_USER      ?= lanvory
 DB_PASSWORD  ?= lanvory
 DB_NAME      ?= lanvory
+# Demo: a disposable database, freshly seeded with sample homelab data on each run.
+DEMO_CONTAINER ?= lanvory-pg-demo
+DEMO_PORT      ?= 5433
+DEMO_URL       := postgres://$(DB_USER):$(DB_PASSWORD)@localhost:$(DEMO_PORT)/$(DB_NAME)?sslmode=disable
 
 
 help:
@@ -27,6 +31,8 @@ help:
 	@echo "  make db-stop   stop the dev database"
 	@echo "  make run       API + built web UI on http://localhost:$(WEB_PORT) (production mode)"
 	@echo "  make dev       API + Vite web UI on http://localhost:5173 (hot reload)"
+	@echo "  make demo      dev stack on a FRESH seeded sample database (:$(DEMO_PORT), rebuilt each run)"
+	@echo "  make demo-stop stop the demo copy database"
 	@echo "  make build     build backend binary + frontend dist"
 	@echo "  make test      backend unit tests + frontend typecheck"
 	@echo "  make secret-key  print a fresh LV_SECRET_KEY value (add to deploy/.env)"
@@ -65,6 +71,37 @@ db:
 db-stop:
 	@docker stop $(PG_CONTAINER) 2>/dev/null || echo "$(PG_CONTAINER) not running"
 	@echo "✔ database stopped"
+
+# --- Demo (fresh seeded database) ------------------------------------------
+# Runs the dev stack against a disposable database that is rebuilt empty and
+# seeded with the built-in sample homelab data (backend/internal/db/seed.go)
+# on every invocation. Your real dev database on :$(PG_PORT) is never touched.
+
+## Rebuild the demo database fresh and run the dev stack against it.
+demo: install
+	@bash -c 'set -e; \
+	docker rm -f $(DEMO_CONTAINER) >/dev/null 2>&1 || true; \
+	echo "▶ creating fresh $(DEMO_CONTAINER) on :$(DEMO_PORT)"; \
+	docker run -d --name $(DEMO_CONTAINER) \
+		-e POSTGRES_USER=$(DB_USER) \
+		-e POSTGRES_PASSWORD=$(DB_PASSWORD) \
+		-e POSTGRES_DB=$(DB_NAME) \
+		-p $(DEMO_PORT):5432 \
+		postgres:17-alpine; \
+	until docker exec $(DEMO_CONTAINER) pg_isready -U $(DB_USER) >/dev/null 2>&1; do \
+		sleep 0.5; \
+	done; \
+	echo "✔ fresh demo db ready on localhost:$(DEMO_PORT)"'
+	@echo "▶ demo mode: API on :$(API_PORT), Vite on :5173 (sample seed, Ctrl+C stops both)"
+	@bash -c '$(ENV_DOT) trap "kill 0" EXIT; \
+		(cd backend && LV_ENV=development LV_ADDR=:$(API_PORT) LV_DATABASE_URL=$(DEMO_URL) LV_SEED_MODE=dev go run ./cmd/server) & \
+		(cd frontend && LV_API_TARGET=http://127.0.0.1:$(API_PORT) npm run dev) & \
+		wait'
+
+## Stop the demo database.
+demo-stop:
+	@docker stop $(DEMO_CONTAINER) 2>/dev/null || echo "$(DEMO_CONTAINER) not running"
+	@echo "✔ demo database stopped"
 
 # --- Prerequisites --------------------------------------------------------
 
@@ -123,4 +160,4 @@ test:
 	cd backend && go build ./... && go vet ./... && go test ./...
 	cd frontend && npm run typecheck
 
-.PHONY: help db db-stop install backend web run dev build test secret-key
+.PHONY: help db db-stop demo demo-stop install backend web run dev build test secret-key
