@@ -1,125 +1,68 @@
 # Lanvory
 
-**Self-hosted homelab infrastructure & asset management.** One place for physical devices, VMs and
-containers, IP addresses, subnets, VLANs, and the services that run on top of them.
+**A self-hosted inventory for your homelab.** Track physical devices, virtual machines, containers, networks, IP addresses, and the services that run on them.
 
-Lanvory is the single source of truth that replaces scattered spreadsheets, Markdown notes, and
-one-off config files. It is local-first, needs no cloud, and is designed for daily use by a single
-homelab operator.
+Lanvory replaces scattered spreadsheets and notes. It runs locally as a Go API, a React web app, and PostgreSQL. No cloud account is required.
 
-> **Status: feature-complete (Phases 1–6).** Asset inventory with parent/child hosting, IPAM with
-> address grid and assignment history, service registry, network topology, CSV/JSON import/export,
-> and read-only integrations (Proxmox, Docker, Kubernetes, ICMP, DNS, Cloudflare, AdGuard Home,
-> ARP scan) are implemented. Remaining "planned" connectors (SNMP, SSH, UniFi, OPNsense) are
-> explicitly labeled in the UI — never faked.
->
-> *README last reviewed against the codebase: 2026-11-17.*
+![Lanvory dashboard showing homelab inventory and network status](docs/img/screenshot.png)
 
----
+## Features
 
-## Highlights
+- **Asset inventory:** physical and virtual assets, parent/child hosting, network interfaces, locations, tags, typed relationships, bulk actions, and saved views.
+- **IP address management:** subnets, VLANs, an interactive address grid, next-available lookup, bulk reserve/release, assignment history, and IPv4/IPv6 support.
+- **Services and topology:** track service endpoints and deployments; build network views from explicit physical, virtualization, and dependency links.
+- **DNS inventory:** manage domains and A, AAAA, CNAME, MX, TXT, SRV, CAA, and NS records; compare declared records with observed DNS state.
+- **Integrations:** read-only sync for Proxmox, Docker, Kubernetes, Cloudflare, AdGuard Home, DNS, and ARP discovery, with optional ICMP checks. Observed data stays separate from operator-maintained fields. Planned connectors are labeled in the UI.
+- **Import and export:** preview and map CSV columns before import; export and restore inventory as JSON.
+- **Agent access:** an MCP server at `/mcp` exposes CRUD operations to agents using revocable, database-backed tokens. See [the MCP guide](docs/MCP.md).
+- **Security and auditing:** Argon2id password hashing, server-side sessions, CSRF protection, rate-limited authentication, an activity log, and encrypted integration secrets.
 
-- **Modular monolith** — one Go binary (chi + pgx) and one React SPA, PostgreSQL as the only state.
-- **Complete asset inventory** — physical/virtual assets with host→guest hierarchy, interfaces,
-  typed relationships (cycle-safe), locations, tags, bulk operations, saved views.
-- **Practical IPAM** — subnets with overlap protection per context, VLANs, interactive address
-  grid, next-available finder, bulk reserve/release, assignment history, RFC 3021 /31-/32 handling.
-- **Service registry** — endpoints with quick links, multi-host deployments, host distribution.
-- **Network topology** — React Flow canvas from explicit links only (physical / virtualization /
-  dependency views), drag-position persistence, connection port metadata.
-- **DNS inventory** — domains and subdomain records (A/AAAA/CNAME/MX/TXT/SRV/CAA/NS) with declared
-  vs. observed values: one-click DNS resolution, drift detection, and a `dns` integration
-  (AXFR zone transfer or crt.name certificate-transparency enumeration) that syncs observed state.
-- **Data portability** — CSV import with column mapping + row-level preview, transactional commit,
-  JSON inventory export and idempotent restore.
-- **Integrations** — read-only Proxmox (nodes/VMs/LXC), Docker, Kubernetes (nodes, pods, Services),
-  DNS (AXFR + crt.name certificate transparency), Cloudflare (zones + DNS records), AdGuard Home
-  (local rewrites + client observations) and ARP scan (gopacket sweep → Discovered Devices +
-  automatic IPAM registration) syncs, opt-in ICMP checks; secrets encrypted at rest (AES-256-GCM),
-  observed state kept separate from declared inventory.
-- **Agent access (MCP)** — a Model Context Protocol server at `/mcp` (streamable HTTP, Bearer
-  tokens) exposing full CRUD over inventory data to agents; DB-backed, revocable API tokens.
-  See [docs/MCP.md](docs/MCP.md).
-- **Argon2id** password hashing, server-side sessions, double-submit CSRF, rate-limited auth
-  endpoints, structured audit trail.
-- **Full normalized schema from day one** — assets, interfaces, relationships, subnets, VLANs,
-  IP allocations + history, services, integrations (native `inet`/`cidr` types, IPv6-ready).
-- **Operational dashboard** with real database-derived counts; every card links to its module.
-- **Command palette** (`⌘K`) searching assets, IPs, MACs, serials, subnets, and services live.
-- **Dark / light / system theme**, compact professional UI in the spirit of Linear/Vercel/Grafana.
+## Run with Docker Compose
 
-## Quickstart (Docker Compose)
+Docker Compose starts the web app, API, and PostgreSQL database:
 
 ```bash
 cd deploy
-cp .env.example .env       # review the password!
+cp .env.example .env
+# Review the settings in .env, then start the stack:
 docker compose up -d --build
 ```
 
-Then open **http://localhost:8088** — or from any machine on your network,
-**http://<host-ip>:8088** (both the web UI and the API bind to `0.0.0.0`). First run shows the
-administrator setup wizard; everything persists in the `pgdata` volume across restarts.
+Open **http://localhost:8088** and follow the administrator setup wizard. To connect from another device on your LAN, use `http://<host-ip>:8088`. Data persists in the `pgdata` volume.
 
-| Entry point | URL | Scope |
-|---|---|---|
-| Web UI | `http://<host-ip>:8088` | SPA + `/api` proxy (recommended) |
-| API (direct) | `http://<host-ip>:8080/api/v1/...` | Authenticated REST for scripts/clients |
+| Entry point | Address | Use |
+| --- | --- | --- |
+| Web app | `http://localhost:8088` | Recommended; includes the `/api` proxy |
+| API | `http://localhost:8080/api/v1/...` | Direct access for scripts and clients |
 
-> Remote access runs over plain HTTP — fine for a trusted home LAN. If you expose Lanvory
-> beyond your LAN, terminate TLS at a reverse proxy and set `LV_COOKIE_SECURE=true` so session
-> cookies are marked Secure.
+For use on a trusted home LAN, the default HTTP setup is sufficient. For access beyond your LAN, put Lanvory behind a TLS-terminating reverse proxy and set `LV_COOKIE_SECURE=true`.
 
-What compose gives you:
+### LAN discovery
 
-| Service  | Image               | Role                                            |
-|----------|---------------------|-------------------------------------------------|
-| `db`     | postgres:17-alpine  | Persistent PostgreSQL (internal network only)   |
-| `backend`| built from source   | REST API, runs migrations on boot               |
-| `frontend`| built from source  | nginx serving the SPA + proxying `/api`         |
+For ARP scans, run the backend on the host with `sudo` to access raw packets. Docker users can instead use the [macvlan override](deploy/docker-compose.arp.yml), which requires wired Ethernet and does not work over Wi-Fi or Docker Desktop. Compose also grants the backend `NET_RAW` for ICMP checks.
 
-### ARP scan deployment (LAN Layer-2 discovery)
+## Develop locally
 
-The **ARP scan** connector sweeps the **active interface's subnet** in-process (gopacket — no
-external binary) and registers everything automatically: devices become **Discovered Device**
-assets (one per MAC, updated in place) and their IPs are recorded in IPAM — the subnet is
-auto-created when none matches. Raw packet access is required:
-
-- **Linux**: `NET_RAW` — the compose file already grants it, and the image sets the file
-  capability on the binary. For LAN reachability from Docker, start with the macvlan override
-  and set the connector interface to `eth1` (the default route stays on the compose bridge):
-
-  ```bash
-  cd deploy
-  # .env: ARP_PARENT (host LAN interface), ARP_SUBNET, ARP_GATEWAY,
-  #       ARP_CONTAINER_IP (a FREE LAN IP — reserve it)
-  docker compose -f docker-compose.yml -f docker-compose.arp.yml up -d --build
-  ```
-- **macOS**: BPF devices are root-only; run the backend as root or loosen the devices once
-  (`sudo chmod g+rw /dev/bpf*` — resets on reboot). Empty interface = the default-route one.
-- **table** mode (no privileges) only lists neighbors the host has talked to — and note that
-  macOS may deny spawned helper processes the neighbor table entirely; prefer the sweep there.
-
-## Development
+With Go, Node.js, and Docker installed, run:
 
 ```bash
-make dev    # PostgreSQL + API on :8090 + Vite on :5173, hot reload on both
+make dev
 ```
 
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for first-time setup, integration tests against a
-disposable PostgreSQL, and repository layout.
+This starts PostgreSQL, the API on port `8090`, and the Vite development server on port `5173`. See [Development](docs/DEVELOPMENT.md) for setup, tests, and repository conventions.
 
-## Operations
+## Documentation
 
-- Backup & restore: [docs/BACKUP.md](docs/BACKUP.md)
-- Architecture, ERD, and design decisions: [ARCHITECTURE.md](ARCHITECTURE.md)
-- API contract: [docs/api/openapi.yaml](docs/api/openapi.yaml)
-- Phases and acceptance criteria: [ROADMAP.md](ROADMAP.md)
+- [Development and testing](docs/DEVELOPMENT.md)
+- [Backup and restore](docs/BACKUP.md)
+- [Architecture and ERD](ARCHITECTURE.md)
+- [REST API contract](docs/api/openapi.yaml)
+- [MCP server](docs/MCP.md)
+- [Roadmap](ROADMAP.md)
 
 ## Security notes
 
-- The database is never exposed outside the compose network.
-- Set `LV_COOKIE_SECURE=true` when serving over HTTPS behind your reverse proxy.
-- Login and setup endpoints are rate-limited per IP; audit events record security-relevant actions
-  (logins, logouts, password changes, settings edits).
-- Service credentials must never be stored in Lanvory — integration secrets are stored encrypted
-  at rest (AES-256-GCM) and are never returned by the API.
+- PostgreSQL is only reachable on the internal Compose network.
+- Enable `LV_COOKIE_SECURE=true` when serving over HTTPS.
+- Integration secrets are encrypted at rest and are never returned by the API. Do not store service credentials in Lanvory's inventory fields.
+- Login and setup endpoints are rate-limited, and security-relevant changes are recorded in the audit log.
