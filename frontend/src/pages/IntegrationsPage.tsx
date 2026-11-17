@@ -59,6 +59,7 @@ const KIND_META: Record<string, { label: string; icon: typeof ServerIcon; descri
   kubernetes: { label: "Kubernetes", icon: BoxesIcon, description: "Imports cluster nodes and pods as assets and Services into the service registry. Uses kubeconfig, an API token, or the in-cluster service account." },
   adguard: { label: "AdGuard Home", icon: ShieldCheckIcon, description: "Imports DNS rewrites for local addresses as observed records (declared values are never overwritten) and marks client IPs as seen on matching IP allocations." },
   arp: { label: "ARP scan", icon: RadarIcon, description: "Sweeps the active interface's subnet in-process (gopacket) — discovered devices are imported automatically as Discovered Device assets and their IPs registered (subnet auto-created when none matches). Table mode only reads the local ARP cache." },
+  opnsense: { label: "OPNsense", icon: KeyRoundIcon, description: "Imports DHCP lease state over the REST API: matching IP allocations are marked as observed with the lease hostname and MAC recorded under observed metadata. Read-only — declared values are never overwritten and no assets are created." },
 }
 
 export function IntegrationsPage() {
@@ -422,6 +423,8 @@ function IntegrationDialog({
   const [k8sToken, setK8sToken] = useState("")
   const [adguardUsername, setAdguardUsername] = useState("")
   const [adguardPassword, setAdguardPassword] = useState("")
+  const [opnsenseKey, setOpnsenseKey] = useState("")
+  const [opnsenseSecret, setOpnsenseSecret] = useState("")
   const [arpMode, setArpMode] = useState<"table" | "scan">("scan")
   const [arpInterface, setArpInterface] = useState("")
   const [arpCidr, setArpCidr] = useState("")
@@ -453,6 +456,8 @@ function IntegrationDialog({
       setK8sInCluster(Boolean(editing.config.in_cluster))
       setAdguardUsername((editing.config.username as string) ?? "")
       setAdguardPassword("")
+      setOpnsenseKey("")
+      setOpnsenseSecret("")
       setArpMode(((editing.config.mode as "table" | "scan") ?? "table"))
       setArpInterface((editing.config.interface as string) ?? "")
       setArpCidr((editing.config.cidr as string) ?? "")
@@ -480,6 +485,8 @@ function IntegrationDialog({
       setK8sToken("")
       setAdguardUsername("")
       setAdguardPassword("")
+      setOpnsenseKey("")
+      setOpnsenseSecret("")
       setArpMode("table")
       setArpInterface("")
       setArpCidr("")
@@ -533,6 +540,17 @@ function IntegrationDialog({
       }
     }
 
+    if (kind === "opnsense") {
+      if (!endpoint.trim()) {
+        toast.error("The OPNsense endpoint is required (e.g. https://opnsense.lan).")
+        return
+      }
+      if (!editing && (!opnsenseKey.trim() || !opnsenseSecret.trim())) {
+        toast.error("An OPNsense API key pair (key + secret) is required.")
+        return
+      }
+    }
+
     const config: Record<string, unknown> =
       kind === "proxmox"
         ? { endpoint: endpoint.trim(), token_id: tokenId.trim(), verify_tls: verifyTLS }
@@ -552,9 +570,11 @@ function IntegrationDialog({
                   }
                 : kind === "adguard"
                   ? { endpoint: endpoint.trim(), username: adguardUsername.trim(), verify_tls: verifyTLS }
-                  : kind === "arp"
-                    ? { mode: arpMode, interface: arpInterface.trim(), cidr: arpCidr.trim() }
-                    : { asset_ids: icmpAssets, timeout_seconds: 2 }
+                  : kind === "opnsense"
+                    ? { endpoint: endpoint.trim(), verify_tls: verifyTLS }
+                    : kind === "arp"
+                      ? { mode: arpMode, interface: arpInterface.trim(), cidr: arpCidr.trim() }
+                      : { asset_ids: icmpAssets, timeout_seconds: 2 }
     const secrets: Record<string, string> =
       kind === "proxmox" && tokenSecret
         ? { token_secret: tokenSecret }
@@ -564,7 +584,14 @@ function IntegrationDialog({
             ? { token: k8sToken }
             : kind === "adguard" && adguardPassword
               ? { password: adguardPassword }
-              : {}
+              : kind === "opnsense" && (opnsenseKey || opnsenseSecret)
+                ? Object.fromEntries(
+                    [
+                      ["api_key", opnsenseKey],
+                      ["api_secret", opnsenseSecret],
+                    ].filter(([, v]) => v),
+                  )
+                : {}
 
     const intervalSeconds = syncInterval === "" ? null : Number(syncInterval)
 
@@ -823,6 +850,39 @@ function IntegrationDialog({
                 Rewrites whose answer is a local address (private, loopback, link-local, ULA, Tailscale CGNAT) become
                 observed DNS records under auto-created domains; public answers are skipped. Client IPs are recorded as
                 observations on matching IP allocations only.
+              </p>
+            </>
+          ) : null}
+
+          {kind === "opnsense" ? (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="int-opnsense-endpoint">Endpoint *</Label>
+                <Input id="int-opnsense-endpoint" className="font-mono text-xs" placeholder="https://opnsense.lan"
+                  value={endpoint} onChange={(e) => setEndpoint(e.target.value)} />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="int-opnsense-key">API key *</Label>
+                  <Input id="int-opnsense-key" className="font-mono text-xs"
+                    placeholder={editing?.config.secrets_configured?.api_key ? "configured — leave blank to keep" : "key from the API key pair"}
+                    value={opnsenseKey} onChange={(e) => setOpnsenseKey(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="int-opnsense-secret">API secret *</Label>
+                  <Input id="int-opnsense-secret" type="password" className="font-mono text-xs"
+                    placeholder={editing?.config.secrets_configured?.api_secret ? "configured — leave blank to keep" : "secret from the API key pair"}
+                    value={opnsenseSecret} onChange={(e) => setOpnsenseSecret(e.target.value)} />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={verifyTLS} onChange={(e) => setVerifyTLS(e.target.checked)} className="size-4" />
+                Verify TLS certificate (disable for self-signed instances)
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Create the key pair under <span className="font-mono">System › Access › Users › API keys</span>. The sync reads the
+                DHCP lease list and marks matching IP allocations as observed — the lease hostname and MAC are stored as
+                observed metadata, never overwriting declared values.
               </p>
             </>
           ) : null}

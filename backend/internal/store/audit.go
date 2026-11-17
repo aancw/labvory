@@ -46,6 +46,21 @@ func (s *AuditEvents) Prune(ctx context.Context, olderThanDays int) (int64, erro
 	return tag.RowsAffected(), err
 }
 
+// CountFailedLogins counts rejected sign-ins for one username+source pair
+// inside the lookback window (burst detection for security notifications).
+func (s *AuditEvents) CountFailedLogins(ctx context.Context, username, sourceIP string, within time.Duration) (int, error) {
+	var n int
+	err := s.pool.QueryRow(ctx, `
+		SELECT count(*) FROM audit_events
+		WHERE action = 'login.failed'
+		  AND entity_type = 'auth'
+		  AND entity_label = $1
+		  AND source_ip = $2
+		  AND occurred_at > now() - make_interval(secs => $3)`,
+		username, sourceIP, int(within.Seconds())).Scan(&n)
+	return n, err
+}
+
 // List returns the most recent audit events, optionally filtered by entity type
 // and action, with a hard upper bound.
 func (s *AuditEvents) List(ctx context.Context, limit, offset int, entityType, action string) ([]AuditEvent, int, error) {

@@ -103,6 +103,16 @@ func (r *Runner) dispatch(ctx context.Context, integ store.Integration) (map[str
 			return nil, err
 		}
 		return SyncAdGuard(ctx, r.pool, integ, secret)
+	case "opnsense":
+		apiKey, err := r.secretValue(integ, "api_key")
+		if err != nil {
+			return nil, err
+		}
+		apiSecret, err := r.secretValue(integ, "api_secret")
+		if err != nil {
+			return nil, err
+		}
+		return SyncOPNsense(ctx, r.pool, integ, apiKey, apiSecret)
 	default:
 		return nil, fmt.Errorf("integration kind %q has no sync implementation", integ.Kind)
 	}

@@ -772,6 +772,26 @@ func (s *IPAddresses) MarkObserved(ctx context.Context, address string, observed
 	return err
 }
 
+// ObserveLease marks an address as last seen by an integration and merges one
+// observation under metadata.observed.<key> in a single statement. Declared
+// fields (status, hostname, description, assignment) are never touched, and
+// updated_at is deliberately left alone so observations don't pollute
+// "recently updated" views. Returns whether a tracked row matched.
+func (s *IPAddresses) ObserveLease(ctx context.Context, address string, observedAt time.Time, key string, observed map[string]any) (bool, error) {
+	payload, err := json.Marshal(observed)
+	if err != nil {
+		return false, err
+	}
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE ip_addresses
+		SET last_observed_at=$2,
+		    metadata=jsonb_set(metadata, '{observed}',
+		                       COALESCE(metadata->'observed', '{}'::jsonb) || jsonb_build_object($3::text, $4::jsonb))
+		WHERE address=$1`,
+		address, observedAt, key, string(payload))
+	return tag.RowsAffected() > 0, err
+}
+
 // History returns assignment history for one address.
 func (s *IPAddresses) History(ctx context.Context, ipID string) ([]map[string]any, error) {
 	rows, err := s.pool.Query(ctx, `

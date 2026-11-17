@@ -13,7 +13,7 @@ import (
 )
 
 // Implemented kinds vs. designed-but-not-built ones (honesty in the UI).
-var implementedKinds = setOf("proxmox", "docker", "icmp", "dns", "cloudflare", "kubernetes", "adguard", "arp")
+var implementedKinds = setOf("proxmox", "docker", "icmp", "dns", "cloudflare", "kubernetes", "adguard", "arp", "opnsense")
 var knownKinds = setOf("proxmox", "docker", "icmp", "snmp", "ssh", "unifi", "opnsense", "pfsense", "dns", "cloudflare", "kubernetes", "adguard", "arp")
 
 // Secret keys that must be encrypted at rest and never echoed back.
@@ -26,6 +26,7 @@ var secretKeysByKind = map[string][]string{
 	"kubernetes": {"token"},
 	"adguard":    {"password"},
 	"arp":        {},
+	"opnsense":   {"api_key", "api_secret"},
 }
 
 // handleListIntegrations returns configured integrations with secrets redacted.

@@ -1,11 +1,17 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/aancw/lanvory/internal/auth"
 	"github.com/aancw/lanvory/internal/httpx"
+	"github.com/aancw/lanvory/internal/notify"
 	"github.com/aancw/lanvory/internal/store"
 )
 
@@ -104,6 +110,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			"Invalid or expired verification code.", nil)
 		return
 	case errors.Is(err, auth.ErrInvalidCredentials):
+		go s.notifyFailedLoginBurst(context.WithoutCancel(r.Context()), req.Username, clientIP(r))
 		httpx.Error(w, r, http.StatusUnauthorized, "invalid_credentials",
 			"Invalid username or password.", nil)
 		return
@@ -115,7 +122,108 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.setSessionCookie(w, sess.Token, sess.ExpiresAt)
+	s.notifyNewDeviceLogin(r.Context(), user, clientIP(r))
 	httpx.WriteJSON(w, http.StatusOK, userResponse{User: user})
+}
+
+// notifyNewDeviceLogin pushes a webhook when a sign-in comes from a source IP
+// the account has never used before. Delivery is best-effort: configuration
+// and network problems are logged, never surfaced to the login flow.
+func (s *Server) notifyNewDeviceLogin(ctx context.Context, user store.User, ip string) {
+	sessions, err := s.sessions.ListForUser(ctx, user.ID)
+	if err != nil {
+		s.logger.Warn("new-device check failed", "error", err, "user", user.Username)
+		return
+	}
+	if len(sessions) <= 1 {
+		return // first session ever: nothing to compare against
+	}
+	for _, sess := range sessions {
+		if sess.SourceIP == ip && sess.SourceIP != "" {
+			return // known IP
+		}
+	}
+	url, _ := s.webhookURL(ctx)
+	if url == "" {
+		return
+	}
+	s.logger.Info("login from previously unseen source", "user", user.Username, "ip", ip)
+	s.notifyAsync(url, "New device signed in",
+		fmt.Sprintf("%s signed in from %s — a source address this account has not used before.", user.Username, ip))
+}
+
+// notifyFailedLoginBurst pushes a webhook on every 5th failed login for one
+// username+IP pair inside the burst window, throttled so a sustained attack
+// produces at most one notification per window.
+const (
+	failedLoginWindow   = 10 * time.Minute
+	failedLoginBurst    = 5
+	failedLoginThrottle = failedLoginWindow
+)
+
+// notifyFailedLoginBurst checks the audit trail after a rejected login.
+func (s *Server) notifyFailedLoginBurst(ctx context.Context, username, ip string) {
+	n, err := s.audit.CountFailedLogins(ctx, username, ip, failedLoginWindow)
+	if err != nil {
+		s.logger.Warn("failed-login count failed", "error", err)
+		return
+	}
+	if n == 0 || n%failedLoginBurst != 0 {
+		return
+	}
+	// Throttle: one notification per username+IP per window even if the count
+	// keeps climbing through multiples of five.
+	s.securityMu.Lock()
+	key := username + "|" + ip
+	last, seen := s.failedLoginNotified[key]
+	now := time.Now()
+	if seen && now.Sub(last) < failedLoginThrottle {
+		s.securityMu.Unlock()
+		return
+	}
+	s.failedLoginNotified[key] = now
+	// Opportunistic cleanup so the map cannot grow unbounded.
+	if len(s.failedLoginNotified) > 4096 {
+		for k, t := range s.failedLoginNotified {
+			if now.Sub(t) > failedLoginThrottle {
+				delete(s.failedLoginNotified, k)
+			}
+		}
+	}
+	s.securityMu.Unlock()
+
+	url, _ := s.webhookURL(ctx)
+	if url == "" {
+		return
+	}
+	s.notifyAsync(url, "Failed login burst",
+		fmt.Sprintf("%d failed sign-in attempts for %q from %s in the last %d minutes.", n, username, ip, int(failedLoginWindow.Minutes())))
+}
+
+// webhookURL reads the notification webhook from settings; empty = disabled.
+func (s *Server) webhookURL(ctx context.Context) (string, error) {
+	all, err := s.settings.All(ctx)
+	if err != nil {
+		return "", err
+	}
+	raw := all["notifications.webhook_url"]
+	var url string
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &url)
+	}
+	return strings.TrimSpace(url), nil
+}
+
+// notifyAsync delivers one webhook without blocking or failing the request
+// path; delivery problems are logged only.
+func (s *Server) notifyAsync(url, title, message string) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := notify.Post(ctx, url, title, message); err != nil {
+			s.logger.Warn("security notification delivery failed", "error", err, "title", title)
+		}
+	}()
 }
 
 // handleLogout revokes the session.

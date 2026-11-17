@@ -181,11 +181,24 @@ export function ImportExportPage() {
   }
 
   const exportEntityCSV = async (e: Entity) => {
-    // Client-side CSV export from the same list endpoints the UI uses.
-    const res = await fetch(`/api/v1/${e === "assets" ? "assets?limit=100" : e === "subnets" ? "subnets" : "ip-addresses?limit=300"}`, { credentials: "include" })
+    // Assets and addresses export server-side (complete rows, no pagination
+    // caps, proper CSV escaping); subnets stay client-side from the list API.
+    if (e === "assets" || e === "ip_addresses") {
+      try {
+        const path = e === "assets" ? "/api/v1/export/assets.csv" : "/api/v1/export/ip-addresses.csv"
+        const res = await fetch(path, { credentials: "include" })
+        if (!res.ok) throw new Error(String(res.status))
+        triggerDownload(await res.blob(), e === "assets" ? "lanvory-assets.csv" : "lanvory-ip-addresses.csv")
+        toast.success("Exported — the download has every tracked row.")
+      } catch {
+        toast.error("Export failed.")
+      }
+      return
+    }
+    // Client-side CSV export from the same list endpoint the UI uses.
+    const res = await fetch("/api/v1/subnets", { credentials: "include" })
     const data = await res.json()
-    const rows: Record<string, unknown>[] =
-      data.assets ?? data.subnets ?? data.addresses ?? []
+    const rows: Record<string, unknown>[] = data.subnets ?? []
     const fields = ENTITY_FIELDS[e]
     const lines = [fields.join(",")]
     for (const r of rows) {

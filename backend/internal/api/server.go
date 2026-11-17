@@ -5,6 +5,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -51,6 +52,10 @@ type Server struct {
 	runner       *integrations.Runner
 	box          *secrets.Box
 	loginLimiter *httpx.IPRateLimiter
+	// failedLoginNotified throttles burst notifications (see
+	// notifyFailedLoginBurst); guarded by securityMu.
+	securityMu          sync.Mutex
+	failedLoginNotified map[string]time.Time
 }
 
 // NewServer constructs the API server with its stores.
@@ -67,33 +72,34 @@ func NewServer(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, authS
 	// must work even when no secret key is configured.
 	runner := integrations.NewRunner(pool, box)
 	return &Server{
-		cfg:             cfg,
-		logger:          logger,
-		pool:            pool,
-		auth:            authSvc,
-		users:           store.NewUsers(pool),
-		sessions:        store.NewSessions(pool),
-		settings:        store.NewSettings(pool),
-		audit:           store.NewAuditEvents(pool),
-		stats:           store.NewStats(pool),
-		search:          store.NewSearch(pool),
-		assets:          store.NewAssets(pool),
-		interfaces:      store.NewInterfaces(pool),
-		relationships:   store.NewRelationships(pool),
-		locations:       store.NewLocations(pool),
-		tags:            store.NewTags(pool),
-		subnets:         store.NewSubnets(pool),
-		ipAddresses:     store.NewIPAddresses(pool),
-		vlans:           store.NewVlans(pool),
-		networkContexts: store.NewNetworkContexts(pool),
-		services:        store.NewServices(pool),
-		importer:        store.NewImporter(pool),
-		integrations:    store.NewIntegrations(pool),
-		tokens:          store.NewAPITokens(pool),
-		domains:         store.NewDomains(pool),
-		runner:          runner,
-		box:             box,
-		loginLimiter:    httpx.NewIPRateLimiter(12*time.Second, 8),
+		cfg:                 cfg,
+		logger:              logger,
+		pool:                pool,
+		auth:                authSvc,
+		users:               store.NewUsers(pool),
+		sessions:            store.NewSessions(pool),
+		settings:            store.NewSettings(pool),
+		audit:               store.NewAuditEvents(pool),
+		stats:               store.NewStats(pool),
+		search:              store.NewSearch(pool),
+		assets:              store.NewAssets(pool),
+		interfaces:          store.NewInterfaces(pool),
+		relationships:       store.NewRelationships(pool),
+		locations:           store.NewLocations(pool),
+		tags:                store.NewTags(pool),
+		subnets:             store.NewSubnets(pool),
+		ipAddresses:         store.NewIPAddresses(pool),
+		vlans:               store.NewVlans(pool),
+		networkContexts:     store.NewNetworkContexts(pool),
+		services:            store.NewServices(pool),
+		importer:            store.NewImporter(pool),
+		integrations:        store.NewIntegrations(pool),
+		tokens:              store.NewAPITokens(pool),
+		domains:             store.NewDomains(pool),
+		runner:              runner,
+		box:                 box,
+		loginLimiter:        httpx.NewIPRateLimiter(12*time.Second, 8),
+		failedLoginNotified: map[string]time.Time{},
 	}
 }
 
@@ -274,6 +280,8 @@ func (s *Server) mountDataRoutes(r chi.Router) {
 	r.Get("/topology", s.handleTopology)
 	r.Patch("/relationships/{relationshipID}", s.handleUpdateRelationship)
 	r.Get("/export/inventory.json", s.handleExportInventory)
+	r.Get("/export/assets.csv", s.handleExportAssetsCSV)
+	r.Get("/export/ip-addresses.csv", s.handleExportIPsCSV)
 	r.Post("/import/preview", s.handleImportPreview)
 	r.Post("/import/commit", s.handleImportCommit)
 	r.Post("/import/restore", s.handleImportRestore)
