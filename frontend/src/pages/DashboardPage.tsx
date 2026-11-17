@@ -176,8 +176,11 @@ export function DashboardPage() {
             const byOS = stats.by_os ?? []
             const byHost = stats.services_by_host ?? []
             if (util.length === 0 && byOS.length === 0 && byHost.length === 0) return null
+            const visible = (util.length > 0 ? 1 : 0) + (byOS.length > 0 ? 1 : 0) + (byHost.length > 0 ? 1 : 0)
+            const gridCols =
+              visible === 1 ? "" : visible === 2 ? "sm:grid-cols-2" : "lg:grid-cols-3"
             return (
-              <div className="mt-6 grid gap-4 lg:grid-cols-3">
+              <div className={cn("mt-6 grid gap-4", gridCols)}>
                 {util.length > 0 ? (
                   <Card>
                     <CardHeader><CardTitle className="text-sm">IP utilization by subnet</CardTitle></CardHeader>
@@ -187,7 +190,9 @@ export function DashboardPage() {
                           <li key={s.id} className="flex items-center gap-3 text-sm">
                             <Link to={`/subnets/${s.id}`} className="min-w-0 flex-1 truncate font-mono text-xs hover:underline underline-offset-2">
                               {s.cidr}
-                              <span className="ml-1.5 font-sans text-muted-foreground">{s.name}</span>
+                              {s.name && s.name !== s.cidr ? (
+                                <span className="ml-1.5 font-sans text-muted-foreground">{s.name}</span>
+                              ) : null}
                             </Link>
                             <UtilizationMini value={s.utilization} />
                           </li>
