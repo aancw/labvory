@@ -47,7 +47,7 @@ func TestAPIWorkflow(t *testing.T) {
 
 	cfg := config.Config{Env: "production", CookieSecure: false, SessionTTL: time.Hour}
 	logger := testLogger()
-	authSvc := auth.NewService(store.NewUsers(pool), store.NewSessions(pool), store.NewAuditEvents(pool), logger, cfg.SessionTTL)
+	authSvc := auth.NewService(store.NewUsers(pool), store.NewSessions(pool), store.NewAuditEvents(pool), logger, cfg.SessionTTL, nil)
 	srv := NewServer(cfg, logger, pool, authSvc)
 	ts := httptest.NewServer(srv.Routes())
 	defer ts.Close()

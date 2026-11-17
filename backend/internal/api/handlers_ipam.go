@@ -1068,8 +1068,10 @@ func (s *Server) handleBulkIP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListIPs(w http.ResponseWriter, r *http.Request) {
 	limit := clampInt(parseQueryInt(r, "limit", 100), 1, 300)
 	offset := clampInt(parseQueryInt(r, "offset", 0), 0, 100000)
+	observedConflict := r.URL.Query().Get("observed_conflict") == "true" ||
+		r.URL.Query().Get("observed_conflict") == "1"
 	items, total, err := s.ipAddresses.ListGlobal(r.Context(),
-		r.URL.Query().Get("status"), r.URL.Query().Get("q"), limit, offset)
+		r.URL.Query().Get("status"), r.URL.Query().Get("q"), observedConflict, limit, offset)
 	if err != nil {
 		s.logger.Error("list ips failed", "error", err)
 		httpx.Error(w, r, http.StatusInternalServerError, "internal", "Could not load addresses.", nil)

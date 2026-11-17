@@ -119,6 +119,7 @@ export function DashboardPage() {
               { label: "Services down", count: stats.alerts?.services_down ?? 0, to: "/services" },
               { label: "Certs expiring (30d)", count: stats.alerts?.certs_expiring ?? 0, to: "/services" },
               { label: "IP conflicts", count: stats.alerts?.ip_conflicts ?? 0, to: "/ips?status=conflict" },
+              { label: "MAC mismatches (24h)", count: stats.alerts?.observed_ip_conflicts ?? 0, to: "/ips?observed_conflict=1" },
               { label: "Warranty expiring (60d)", count: stats.alerts?.warranty_expiring ?? 0, to: "/assets" },
               { label: "Services without host", count: stats.alerts?.services_without_host ?? 0, to: "/services" },
             ]

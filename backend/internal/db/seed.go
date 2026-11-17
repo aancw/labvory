@@ -68,17 +68,17 @@ func SeedDevHomelab(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger
 
 	// --- Assets --------------------------------------------------------------
 	type seedAsset struct {
-		name, hostname, typeSlug, status, lifecycle, environment  string
+		name, hostname, typeSlug, status, lifecycle, environment    string
 		manufacturer, model, os, osVersion, cpuModel, serial, notes string
-		cores                                                     int
-		ram, storageGB                                            float64
-		warrantyDays                                              int // 0 = not set; >0 = expires N days from now
-		purchaseDate                                              string
-		purchaseCost                                              float64
-		location                                                  string // location slug
-		parent                                                    string // name of parent seed asset
-		observed                                                  string
-		extraMeta                                                 map[string]any
+		cores                                                       int
+		ram, storageGB                                              float64
+		warrantyDays                                                int // 0 = not set; >0 = expires N days from now
+		purchaseDate                                                string
+		purchaseCost                                                float64
+		location                                                    string // location slug
+		parent                                                      string // name of parent seed asset
+		observed                                                    string
+		extraMeta                                                   map[string]any
 	}
 	now := time.Now().UTC()
 	seedAssets := []seedAsset{
@@ -223,7 +223,7 @@ func SeedDevHomelab(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger
 
 	// --- VLANs ----------------------------------------------------------------
 	type seedVlan struct {
-		vid          int
+		vid           int
 		name, purpose string
 	}
 	seedVlans := []seedVlan{
@@ -247,9 +247,9 @@ func SeedDevHomelab(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger
 		ip, status, asset, iface, method, desc string
 	}
 	type seedSubnet struct {
-		cidr, name, vlanName, gateway, environment string
+		cidr, name, vlanName, gateway, environment               string
 		dhcpStart, dhcpEnd, reservedStart, reservedEnd, location string
-		allocs []seedAlloc
+		allocs                                                   []seedAlloc
 	}
 	seedSubnets := []seedSubnet{
 		{cidr: "10.10.10.0/24", name: "Management", vlanName: "Management", gateway: "10.10.10.1", environment: "production",
@@ -374,13 +374,13 @@ func SeedDevHomelab(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger
 	}
 	type seedService struct {
 		name, slug, category, deployType, status, environment, source string
-		repoURL, docsURL, notes string
-		endpoints []seedEndpoint
-		hosts     []string // asset names; empty = deliberately host-less
+		repoURL, docsURL, notes                                       string
+		endpoints                                                     []seedEndpoint
+		hosts                                                         []string // asset names; empty = deliberately host-less
 	}
 	seedServices := []seedService{
 		{name: "Pi-hole", slug: "pi-hole", category: "network", deployType: "lxc", status: "online", environment: "production",
-			notes: "Primary DNS for the whole lab; watch for FTL memory growth.",
+			notes:     "Primary DNS for the whole lab; watch for FTL memory growth.",
 			endpoints: []seedEndpoint{{label: "Web UI", protocol: "http", port: 80, url: "http://pihole.lab/admin", lastStatus: 200}},
 			hosts:     []string{"lxc-pihole"}},
 		{name: "Home Assistant", slug: "home-assistant", category: "home-automation", deployType: "vm", status: "online", environment: "production",
@@ -397,19 +397,19 @@ func SeedDevHomelab(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger
 			},
 			hosts: []string{"docker-host"}},
 		{name: "Uptime Kuma", slug: "uptime-kuma", category: "monitoring", deployType: "docker", status: "online", environment: "production",
-			repoURL: "https://github.com/louislam/uptime-kuma",
+			repoURL:   "https://github.com/louislam/uptime-kuma",
 			endpoints: []seedEndpoint{{label: "Web UI", protocol: "http", port: 3001, url: "http://docker.lab:3001", lastStatus: 200}},
 			hosts:     []string{"docker-host"}},
 		{name: "Grafana", slug: "grafana", category: "monitoring", deployType: "docker", status: "offline", environment: "production",
-			notes: "Container crashed after a bad datasource migration — fix pending.",
+			notes:     "Container crashed after a bad datasource migration — fix pending.",
 			endpoints: []seedEndpoint{{label: "Web UI", protocol: "http", port: 3000, url: "http://docker.lab:3000", lastStatus: 502, healthEnabled: true}},
 			hosts:     []string{"docker-host"}},
 		{name: "Vaultwarden", slug: "vaultwarden", category: "security", deployType: "docker", status: "online", environment: "production",
-			notes: "Not attached to a tracked host yet — register its container or LXC.",
+			notes:     "Not attached to a tracked host yet — register its container or LXC.",
 			endpoints: []seedEndpoint{{label: "Web UI", protocol: "https", port: 8222, url: "https://vault.lab", lastStatus: 200}},
 			hosts:     nil},
 		{name: "Argo CD", slug: "argo-cd", category: "development", deployType: "kubernetes", status: "online", environment: "lab", source: "kubernetes",
-			repoURL: "https://github.com/argoproj/argo-cd",
+			repoURL:   "https://github.com/argoproj/argo-cd",
 			endpoints: []seedEndpoint{{label: "Web UI", protocol: "https", port: 443, url: "https://argo.k8s.lab", lastStatus: 200}},
 			hosts:     []string{"k8s-node-01"}},
 	}

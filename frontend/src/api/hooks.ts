@@ -29,12 +29,14 @@ import type {
   ServiceDetail,
   ServiceDeployment,
   ServiceEndpoint,
+  SessionList,
   SettingsMap,
   SetupStatus,
   Subnet,
   SubnetDetail,
   SyncRun,
   Tag,
+  TOTPSetup,
   TopologyGraph,
   User,
   Vlan,
@@ -68,9 +70,51 @@ export function useSetupStatus() {
 export function useLogin() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: { username: string; password: string }) =>
+    mutationFn: (input: { username: string; password: string; totp_code?: string }) =>
       api.post<{ user: User }>("/api/v1/auth/login", input),
     onSuccess: () => qc.invalidateQueries(),
+  })
+}
+
+// ---------- two-factor (TOTP) ----------
+
+export function useTOTPSetup() {
+  return useMutation({
+    mutationFn: () => api.post<TOTPSetup>("/api/v1/auth/2fa/setup"),
+  })
+}
+
+export function useTOTPEnable() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (code: string) => api.post<{ ok: boolean }>("/api/v1/auth/2fa/enable", { code }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["me"] }),
+  })
+}
+
+export function useTOTPDisable() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { password: string; code: string }) =>
+      api.post<{ ok: boolean }>("/api/v1/auth/2fa/disable", input),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["me"] }),
+  })
+}
+
+// ---------- sessions ----------
+
+export function useSessions() {
+  return useQuery({
+    queryKey: ["sessions"],
+    queryFn: () => api.get<SessionList>("/api/v1/auth/sessions"),
+  })
+}
+
+export function useRevokeOtherSessions() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.delete<{ ok: boolean; revoked: number }>("/api/v1/auth/sessions/others"),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["sessions"] }),
   })
 }
 
@@ -577,7 +621,7 @@ export function useIPHistory(ipID: string | undefined, open: boolean) {
   })
 }
 
-export function useIPs(filters: { status?: string; q?: string; limit?: number; offset?: number } = {}) {
+export function useIPs(filters: { status?: string; q?: string; observed_conflict?: boolean; limit?: number; offset?: number } = {}) {
   const params = new URLSearchParams()
   for (const [k, v] of Object.entries(filters)) {
     if (v !== undefined && v !== "") params.set(k, String(v))

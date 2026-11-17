@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strconv"
 	"time"
@@ -432,6 +433,13 @@ type IPAddress struct {
 	LastObservedAt *time.Time `json:"last_observed_at,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
+	// Metadata holds observed facts under metadata.observed.* (e.g. the MAC
+	// the ARP sweep last saw answering at this address). Declared fields stay
+	// out of it.
+	Metadata map[string]any `json:"metadata,omitempty"`
+	// ObservedConflict is computed on list reads: the last ARP observation
+	// within the window saw a different MAC than the assigned interface.
+	ObservedConflict bool `json:"observed_conflict"`
 }
 
 type IPAddresses struct{ pool *pgxpool.Pool }
@@ -441,7 +449,7 @@ func NewIPAddresses(pool *pgxpool.Pool) *IPAddresses { return &IPAddresses{pool:
 const ipColumns = `
 	SELECT i.id, i.subnet_id, text(s.cidr), host(i.address), i.status, i.assignment_method,
 	       i.hostname, i.description, TO_JSONB(i.interface_id) #>> '{}',
-	       TO_JSONB(a.id) #>> '{}', a.name, i.last_observed_at, i.created_at, i.updated_at
+	       TO_JSONB(a.id) #>> '{}', a.name, i.last_observed_at, i.created_at, i.updated_at, i.metadata
 	FROM ip_addresses i
 	JOIN subnets s ON s.id = i.subnet_id
 	LEFT JOIN network_interfaces ni ON ni.id = i.interface_id
@@ -451,8 +459,35 @@ func scanIP(row pgx.Row) (IPAddress, error) {
 	var ip IPAddress
 	err := row.Scan(&ip.ID, &ip.SubnetID, &ip.SubnetCIDR, &ip.Address, &ip.Status, &ip.Method,
 		&ip.Hostname, &ip.Description, &ip.InterfaceID, &ip.AssetID, &ip.AssetName,
-		&ip.LastObservedAt, &ip.CreatedAt, &ip.UpdatedAt)
+		&ip.LastObservedAt, &ip.CreatedAt, &ip.UpdatedAt, &ip.Metadata)
 	return ip, err
+}
+
+// observedConflictWindow bounds how recent an ARP mismatch observation must be
+// to count as a live conflict.
+const observedConflictWindow = 24 * time.Hour
+
+// ipHasObservedConflict reports whether the row's metadata carries a recent
+// ARP observation that saw a different MAC than the assigned interface.
+func ipHasObservedConflict(m map[string]any, now time.Time) bool {
+	if m == nil {
+		return false
+	}
+	obs, _ := m["observed"].(map[string]any)
+	arp, _ := obs["arp"].(map[string]any)
+	if arp == nil || arp["matches"] != false {
+		return false
+	}
+	ts, _ := arp["checked_at"].(string)
+	t, err := time.Parse(time.RFC3339, ts)
+	return err == nil && now.Sub(t) <= observedConflictWindow
+}
+
+// markObservedConflicts sets the computed flag on listed rows.
+func markObservedConflicts(rows []IPAddress, now time.Time) {
+	for i := range rows {
+		rows[i].ObservedConflict = ipHasObservedConflict(rows[i].Metadata, now)
+	}
 }
 
 // ListBySubnet returns tracked rows for one subnet, optionally filtered.
@@ -480,16 +515,27 @@ func (s *IPAddresses) ListBySubnet(ctx context.Context, subnetID, status, q stri
 		}
 		out = append(out, ip)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	markObservedConflicts(out, time.Now())
+	return out, nil
 }
 
 // ListGlobal returns tracked addresses across all subnets (global IP view).
-func (s *IPAddresses) ListGlobal(ctx context.Context, status, q string, limit, offset int) ([]IPAddress, int, error) {
+// observedConflict filters to rows whose latest ARP observation disagrees
+// with their assigned interface MAC.
+func (s *IPAddresses) ListGlobal(ctx context.Context, status, q string, observedConflict bool, limit, offset int) ([]IPAddress, int, error) {
 	where := ""
 	args := []any{}
 	if status != "" {
 		args = append(args, status)
 		where += whereStart(where) + " i.status = $" + itoa(len(args))
+	}
+	if observedConflict {
+		where += whereStart(where) + ` (i.metadata->'observed'->'arp'->>'matches') = 'false'
+		  AND (i.metadata->'observed'->'arp'->>'checked_at')::timestamptz > now() - make_interval(secs => $` + itoa(len(args)+1) + `)`
+		args = append(args, int(observedConflictWindow.Seconds()))
 	}
 	if q != "" {
 		args = append(args, "%"+q+"%", "%"+q+"%")
@@ -517,7 +563,47 @@ func (s *IPAddresses) ListGlobal(ctx context.Context, status, q string, limit, o
 		}
 		out = append(out, ip)
 	}
-	return out, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	markObservedConflicts(out, time.Now())
+	return out, total, nil
+}
+
+// SetObservedSub merges one observation under metadata.observed.<key> on an
+// allocation, leaving other observation keys and declared fields untouched.
+func (s *IPAddresses) SetObservedSub(ctx context.Context, ipID, key string, observed map[string]any) error {
+	var meta map[string]any
+	if err := s.pool.QueryRow(ctx, `SELECT metadata FROM ip_addresses WHERE id=$1`, ipID).Scan(&meta); err != nil {
+		return err
+	}
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	obs, _ := meta["observed"].(map[string]any)
+	if obs == nil {
+		obs = map[string]any{}
+	}
+	obs[key] = observed
+	meta["observed"] = obs
+	merged, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	_, err = s.pool.Exec(ctx, `UPDATE ip_addresses SET metadata=$2, updated_at=now() WHERE id=$1`, ipID, merged)
+	return err
+}
+
+// CountObservedConflicts counts allocations whose latest ARP observation
+// (within the window) saw a different MAC than their assigned interface.
+func (s *IPAddresses) CountObservedConflicts(ctx context.Context, within time.Duration) (int, error) {
+	var n int
+	err := s.pool.QueryRow(ctx, `
+		SELECT count(*) FROM ip_addresses
+		WHERE (metadata->'observed'->'arp'->>'matches') = 'false'
+		  AND (metadata->'observed'->'arp'->>'checked_at')::timestamptz > now() - make_interval(secs => $1)`,
+		int(within.Seconds())).Scan(&n)
+	return n, err
 }
 
 // Get fetches one tracked address.

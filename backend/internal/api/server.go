@@ -133,6 +133,15 @@ func (s *Server) Routes() http.Handler {
 		r.With(s.requireAuth).Get("/auth/me", s.handleMe)
 		r.With(s.requireAuth).Post("/auth/change-password", s.handleChangePassword)
 
+		// Two-factor authentication (TOTP).
+		r.With(s.requireAuth).Post("/auth/2fa/setup", s.handleTOTPSetup)
+		r.With(s.requireAuth).Post("/auth/2fa/enable", s.handleTOTPEnable)
+		r.With(s.requireAuth).Post("/auth/2fa/disable", s.handleTOTPDisable)
+
+		// Session management for the signed-in operator.
+		r.With(s.requireAuth).Get("/auth/sessions", s.handleListSessions)
+		r.With(s.requireAuth).Delete("/auth/sessions/others", s.handleRevokeOtherSessions)
+
 		// Authenticated application APIs.
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireAuth)

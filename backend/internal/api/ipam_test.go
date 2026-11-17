@@ -8,6 +8,7 @@ import (
 	"github.com/aancw/lanvory/internal/auth"
 	"github.com/aancw/lanvory/internal/config"
 	"github.com/aancw/lanvory/internal/db"
+	"github.com/aancw/lanvory/internal/secrets"
 	"github.com/aancw/lanvory/internal/store"
 )
 
@@ -211,7 +212,11 @@ func newTestServerCfg(t *testing.T, databaseURL, secretKey string) (*Server, str
 
 	cfg := config.Config{Env: "production", CookieSecure: false, SessionTTL: time.Hour, SecretKey: secretKey}
 	logger := testLogger()
-	authSvc := auth.NewService(store.NewUsers(pool), store.NewSessions(pool), store.NewAuditEvents(pool), logger, cfg.SessionTTL)
+	var box *secrets.Box
+	if secretKey != "" {
+		box, _ = secrets.NewBox(secretKey)
+	}
+	authSvc := auth.NewService(store.NewUsers(pool), store.NewSessions(pool), store.NewAuditEvents(pool), logger, cfg.SessionTTL, box)
 	srv := NewServer(cfg, logger, pool, authSvc)
 	ts := newHTTPTestServer(t, srv.Routes())
 	activeTestServerURL = ts.URL

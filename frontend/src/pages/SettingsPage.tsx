@@ -5,13 +5,28 @@ import { toast } from "sonner"
 import { z } from "zod"
 
 import { isApiError } from "@/api/client"
-import { useApiTokens, useChangePassword, useCreateApiToken, useMe, useRevokeApiToken, useSettings, useTestNotification, useUpdateSettings } from "@/api/hooks"
-import type { ApiToken, ApiTokenCreated } from "@/api/types"
+import {
+  useApiTokens,
+  useChangePassword,
+  useCreateApiToken,
+  useMe,
+  useRevokeApiToken,
+  useRevokeOtherSessions,
+  useSessions,
+  useSettings,
+  useTestNotification,
+  useTOTPDisable,
+  useTOTPEnable,
+  useTOTPSetup,
+  useUpdateSettings,
+} from "@/api/hooks"
+import type { ApiToken, ApiTokenCreated, TOTPSetup } from "@/api/types"
 import { PageHeader } from "@/components/PageHeader"
 import { useTheme } from "@/components/theme-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { ConfirmDialog } from "@/components/ConfirmDialog"
 import {
   Dialog,
   DialogContent,
@@ -42,8 +57,10 @@ export function SettingsPage() {
         <InstanceCard />
         <NotificationsCard />
         <RetentionCard />
+        <TwoFactorCard />
         <AppearanceCard />
         <SecurityCard />
+        <SessionsCard />
         <AccountCard username={user?.username ?? ""} role={user?.role ?? ""} />
         <div className="lg:col-span-2">
           <ApiTokensCard />
@@ -293,6 +310,276 @@ function AppearanceCard() {
       </CardContent>
     </Card>
   )
+}
+
+// TwoFactorCard manages TOTP enrollment: setup → scan/paste secret → confirm
+// with a code; disable requires the password plus a valid code.
+function TwoFactorCard() {
+  const { data: me } = useMe()
+  const enabled = me?.user?.totp_enabled_at != null
+  const setup = useTOTPSetup()
+  const enable = useTOTPEnable()
+  const disable = useTOTPDisable()
+  const [enroll, setEnroll] = useState<TOTPSetup | null>(null)
+  const [code, setCode] = useState("")
+  const [disableOpen, setDisableOpen] = useState(false)
+  const [disablePassword, setDisablePassword] = useState("")
+  const [disableCode, setDisableCode] = useState("")
+
+  const startEnroll = () => {
+    setCode("")
+    setup.mutate(undefined, {
+      onSuccess: (res) => setEnroll(res),
+      onError: (err) => toast.error(isApiError(err) ? err.message : "Could not start enrollment."),
+    })
+  }
+
+  const confirmEnable = () => {
+    enable.mutate(code.trim(), {
+      onSuccess: () => {
+        toast.success("Two-factor enabled — you will need a code at next sign-in.")
+        setEnroll(null)
+        setCode("")
+      },
+      onError: (err) =>
+        toast.error(isApiError(err) ? err.message : "Could not confirm the code."),
+    })
+  }
+
+  const confirmDisable = () => {
+    disable.mutate(
+      { password: disablePassword, code: disableCode.trim() },
+      {
+        onSuccess: () => {
+          toast.success("Two-factor disabled.")
+          setDisableOpen(false)
+          setDisablePassword("")
+          setDisableCode("")
+        },
+        onError: (err) =>
+          toast.error(isApiError(err) ? err.message : "Could not disable two-factor."),
+      },
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Two-factor authentication</CardTitle>
+        <CardDescription>
+          Require a 6-digit code from an authenticator app (TOTP) at sign-in.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm">
+            {enabled ? (
+              <span className="inline-flex items-center gap-2">
+                <Badge>Enabled</Badge>
+                <span className="text-muted-foreground">since {formatDateTime(me!.user.totp_enabled_at!)}</span>
+              </span>
+            ) : (
+              <span className="text-muted-foreground">Not enabled — password only.</span>
+            )}
+          </div>
+          {enabled ? (
+            <Button variant="outline" size="sm" onClick={() => setDisableOpen(true)}>
+              Disable
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" onClick={startEnroll} disabled={setup.isPending}>
+              {setup.isPending ? "Preparing…" : "Enable"}
+            </Button>
+          )}
+        </div>
+
+        {/* Enrollment dialog: secret + manual entry (no QR dependency). */}
+        <Dialog open={enroll !== null} onOpenChange={(open) => !open && setEnroll(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Set up an authenticator</DialogTitle>
+              <DialogDescription>
+                Add a new TOTP entry in your authenticator app (Aegis, 1Password, Google
+                Authenticator, …) — paste the key below or use &ldquo;enter setup key&rdquo;.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <p className="mb-1 text-xs font-medium text-muted-foreground">Setup key</p>
+                <p className="break-all rounded-md border bg-muted px-3 py-2 font-mono text-sm tracking-wider">
+                  {enroll?.secret}
+                </p>
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-medium text-muted-foreground">otpauth URI (optional)</p>
+                <p className="break-all rounded-md border bg-muted px-3 py-2 font-mono text-xs">
+                  {enroll?.otpauth_uri}
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="totp-confirm">Confirm with a 6-digit code</Label>
+                <Input
+                  id="totp-confirm"
+                  className="text-center font-mono tracking-[0.4em]"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="000000"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && confirmEnable()}
+                  autoFocus
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setEnroll(null)}>Cancel</Button>
+              <Button size="sm" onClick={confirmEnable} disabled={enable.isPending || code.trim().length !== 6}>
+                {enable.isPending ? "Verifying…" : "Confirm & enable"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Disable dialog: password + code. */}
+        <Dialog open={disableOpen} onOpenChange={setDisableOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Disable two-factor?</DialogTitle>
+              <DialogDescription>
+                Sign-ins will again rely on the password alone. Confirm with your password and
+                one last valid code.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="totp-disable-password">Password</Label>
+                <Input
+                  id="totp-disable-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={disablePassword}
+                  onChange={(e) => setDisablePassword(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="totp-disable-code">Verification code</Label>
+                <Input
+                  id="totp-disable-code"
+                  className="text-center font-mono tracking-[0.4em]"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="000000"
+                  value={disableCode}
+                  onChange={(e) => setDisableCode(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setDisableOpen(false)}>Cancel</Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={confirmDisable}
+                disabled={disable.isPending || !disablePassword || disableCode.trim().length !== 6}
+              >
+                {disable.isPending ? "Disabling…" : "Disable 2FA"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
+  )
+}
+
+// SessionsCard lists active logins and lets the operator sign out everywhere
+// except the current device.
+function SessionsCard() {
+  const { data, isLoading } = useSessions()
+  const revoke = useRevokeOtherSessions()
+  const sessions = data?.sessions ?? []
+  const others = sessions.filter((s) => s.id !== data?.current_id)
+
+  const revokeOthers = () => {
+    revoke.mutate(undefined, {
+      onSuccess: (res) =>
+        toast.success(
+          res.revoked === 1 ? "Signed out 1 other session." : `Signed out ${res.revoked} other sessions.`,
+        ),
+      onError: (err) => toast.error(isApiError(err) ? err.message : "Could not revoke sessions."),
+    })
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Active sessions</CardTitle>
+        <CardDescription>Signed-in browsers and clients on this account.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {isLoading ? (
+          <Skeleton className="h-20 w-full" />
+        ) : sessions.length === 0 ? (
+          <p className="rounded-md border border-dashed px-3 py-4 text-center text-sm text-muted-foreground">
+            No active sessions.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {sessions.map((s) => (
+              <li key={s.id} className="flex items-center gap-3 rounded-md border px-3 py-2 text-sm">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">
+                    {shortenUserAgent(s.user_agent) || "Unknown client"}
+                    {s.id === data?.current_id ? (
+                      <Badge className="ml-2 align-middle" variant="secondary">This device</Badge>
+                    ) : null}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {s.source_ip || "unknown IP"} · signed in {formatDateTime(s.created_at)}
+                  </p>
+                </div>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  expires {formatDateTime(s.expires_at)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <ConfirmDialog
+          trigger={
+            <Button variant="outline" size="sm" disabled={others.length === 0}>
+              Sign out {others.length === 1 ? "1 other session" : `${others.length} other sessions`}
+            </Button>
+          }
+          title="Sign out other sessions?"
+          description="Every other signed-in device or client is logged out immediately; this device stays signed in."
+          confirmLabel="Sign out others"
+          onConfirm={revokeOthers}
+        />
+      </CardContent>
+    </Card>
+  )
+}
+
+// shortenUserAgent renders "Firefox 132 · macOS" style hints from a UA string.
+function shortenUserAgent(ua: string): string {
+  if (!ua) return ""
+  const name = /Edg\//.test(ua) ? "Edge"
+    : /OPR\//.test(ua) ? "Opera"
+    : /Chrome\//.test(ua) ? "Chrome"
+    : /Firefox\//.test(ua) ? "Firefox"
+    : /Safari\//.test(ua) ? "Safari"
+    : /curl/.test(ua) ? "curl"
+    : null
+  const os = /Windows/.test(ua) ? "Windows"
+    : /Android/.test(ua) ? "Android"
+    : /iPhone|iPad/.test(ua) ? "iOS"
+    : /Mac OS X/.test(ua) ? "macOS"
+    : /Linux/.test(ua) ? "Linux"
+    : null
+  if (!name && !os) return ua.length > 60 ? ua.slice(0, 57) + "…" : ua
+  return [name, os].filter(Boolean).join(" · ")
 }
 
 const passwordSchema = z

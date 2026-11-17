@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/aancw/lanvory/internal/secrets"
 	"github.com/aancw/lanvory/internal/store"
 )
 
@@ -23,6 +24,13 @@ var (
 	ErrNoUsersAllowed  = errors.New("setup is only available before the first administrator exists")
 	ErrWrongPassword   = errors.New("current password is incorrect")
 
+	// Two-factor errors.
+	ErrTOTPRequired = errors.New("verification code required")
+	ErrInvalidTOTP  = errors.New("invalid verification code")
+	ErrTOTPDisabled = errors.New("two-factor is not enabled")
+	ErrNoSecretBox  = errors.New("secret key not configured")
+	ErrNoTOTPEnroll = errors.New("no pending two-factor enrollment")
+
 	usernameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{2,31}$`)
 )
 
@@ -33,11 +41,14 @@ type Service struct {
 	audit      *store.AuditEvents
 	logger     *slog.Logger
 	sessionTTL time.Duration
+	box        *secrets.Box // optional: TOTP secrets require it
 }
 
-// NewService wires the auth service to its stores.
-func NewService(users *store.Users, sessions *store.Sessions, audit *store.AuditEvents, logger *slog.Logger, sessionTTL time.Duration) *Service {
-	return &Service{users: users, sessions: sessions, audit: audit, logger: logger, sessionTTL: sessionTTL}
+// NewService wires the auth service to its stores. The secrets box is
+// optional; without it TOTP enrollment is refused (login of already-enabled
+// users fails closed).
+func NewService(users *store.Users, sessions *store.Sessions, audit *store.AuditEvents, logger *slog.Logger, sessionTTL time.Duration, box *secrets.Box) *Service {
+	return &Service{users: users, sessions: sessions, audit: audit, logger: logger, sessionTTL: sessionTTL, box: box}
 }
 
 // SetupStatus reports whether the first-run administrator can still be created.
@@ -104,9 +115,10 @@ type SessionToken struct {
 	ExpiresAt time.Time
 }
 
-// Login verifies credentials and issues a session. Timing of a missing user is masked by
+// Login verifies credentials (plus the TOTP code when the user has 2FA
+// enabled) and issues a session. Timing of a missing user is masked by
 // verifying against a deterministic dummy hash.
-func (s *Service) Login(ctx context.Context, username, password, ip, userAgent string) (store.User, SessionToken, error) {
+func (s *Service) Login(ctx context.Context, username, password, totpCode, ip, userAgent string) (store.User, SessionToken, error) {
 	var zero SessionToken
 	user, err := s.users.GetByUsername(ctx, username)
 	if errors.Is(err, store.ErrNotFound) {
@@ -124,12 +136,123 @@ func (s *Service) Login(ctx context.Context, username, password, ip, userAgent s
 		return store.User{}, zero, ErrInvalidCredentials
 	}
 
+	if user.TOTPEnabledAt != nil {
+		if totpCode == "" {
+			return store.User{}, zero, ErrTOTPRequired
+		}
+		secret, derr := s.decryptSecret(user.TOTPSecret)
+		if derr != nil {
+			return store.User{}, zero, derr
+		}
+		step, ok := ValidateTOTP(secret, totpCode, time.Now())
+		if !ok || step <= user.TOTPLastStep {
+			// A reused (replayed) code is as bad as a wrong one.
+			s.auditEvent(ctx, user, "auth", user.ID, user.Username, "login.failed", ip, `{"reason":"totp"}`)
+			return store.User{}, zero, ErrInvalidTOTP
+		}
+		advanced, aerr := s.users.AdvanceTOTPStep(ctx, user.ID, step)
+		if aerr != nil {
+			return store.User{}, zero, aerr
+		}
+		if !advanced {
+			// Lost a race against a concurrent login with the same code.
+			s.auditEvent(ctx, user, "auth", user.ID, user.Username, "login.failed", ip, `{"reason":"totp"}`)
+			return store.User{}, zero, ErrInvalidTOTP
+		}
+	}
+
 	user, token, sess, err := s.createSession(ctx, user, ip, userAgent)
 	if err != nil {
 		return store.User{}, zero, err
 	}
 	s.auditEvent(ctx, user, "auth", user.ID, user.Username, "login.success", ip, "{}")
 	return user, SessionToken{Token: sess, ExpiresAt: token.ExpiresAt}, nil
+}
+
+// SetupTOTP starts 2FA enrollment: it generates a secret, stores it encrypted
+// as the pending enrollment, and returns the plaintext secret plus the
+// otpauth:// URI for the authenticator app.
+func (s *Service) SetupTOTP(ctx context.Context, user store.User) (secret, uri string, err error) {
+	if s.box == nil {
+		return "", "", ErrNoSecretBox
+	}
+	secret, err = GenerateTOTPSecret()
+	if err != nil {
+		return "", "", err
+	}
+	encrypted, err := s.box.Encrypt(secret)
+	if err != nil {
+		return "", "", err
+	}
+	if err := s.users.SetTOTPPending(ctx, user.ID, encrypted); err != nil {
+		return "", "", err
+	}
+	return secret, OTPAuthURI(user.Username, secret), nil
+}
+
+// EnableTOTP confirms a pending enrollment by verifying one code against the
+// stored (pending) secret.
+func (s *Service) EnableTOTP(ctx context.Context, user store.User, code, ip string) error {
+	fresh, err := s.users.GetByID(ctx, user.ID)
+	if err != nil {
+		return err
+	}
+	if fresh.TOTPEnabledAt != nil {
+		return ErrTOTPDisabled // already active; use disable instead
+	}
+	if fresh.TOTPSecret == "" {
+		return ErrNoTOTPEnroll
+	}
+	secret, err := s.decryptSecret(fresh.TOTPSecret)
+	if err != nil {
+		return err
+	}
+	step, ok := ValidateTOTP(secret, code, time.Now())
+	if !ok {
+		return ErrInvalidTOTP
+	}
+	if err := s.users.EnableTOTP(ctx, user.ID, step); err != nil {
+		return err
+	}
+	s.auditEvent(ctx, user, "user", user.ID, user.Username, "totp.enabled", ip, "{}")
+	return nil
+}
+
+// DisableTOTP removes the authenticator. When it is active the operator must
+// confirm with both their password and a valid code.
+func (s *Service) DisableTOTP(ctx context.Context, user store.User, password, code, ip string) error {
+	fresh, err := s.users.GetByID(ctx, user.ID)
+	if err != nil {
+		return err
+	}
+	if fresh.TOTPEnabledAt == nil {
+		return ErrTOTPDisabled
+	}
+	match, err := VerifyPassword(password, fresh.PasswordHash)
+	if err != nil || !match {
+		return ErrWrongPassword
+	}
+	secret, err := s.decryptSecret(fresh.TOTPSecret)
+	if err != nil {
+		return err
+	}
+	if _, ok := ValidateTOTP(secret, code, time.Now()); !ok {
+		return ErrInvalidTOTP
+	}
+	if err := s.users.DisableTOTP(ctx, user.ID); err != nil {
+		return err
+	}
+	s.auditEvent(ctx, user, "user", user.ID, user.Username, "totp.disabled", ip, "{}")
+	return nil
+}
+
+// decryptSecret unwraps an encrypted TOTP secret; without a configured box it
+// fails closed.
+func (s *Service) decryptSecret(encrypted string) (string, error) {
+	if s.box == nil {
+		return "", ErrNoSecretBox
+	}
+	return s.box.Decrypt(encrypted)
 }
 
 // Logout revokes the session and records the event.
@@ -158,7 +281,7 @@ func (s *Service) ChangePassword(ctx context.Context, user store.User, currentPa
 	if err := s.users.UpdatePassword(ctx, user.ID, hash); err != nil {
 		return err
 	}
-	if err := s.sessions.DeleteOthersForUser(ctx, user.ID, currentTokenHash); err != nil {
+	if _, err := s.sessions.DeleteOthersForUser(ctx, user.ID, currentTokenHash); err != nil {
 		return err
 	}
 	s.auditEvent(ctx, user, "user", user.ID, user.Username, "password.changed", ip, "{}")

@@ -20,6 +20,15 @@ type Session struct {
 	UserAgent string
 }
 
+// SessionView is a client-safe projection of a session (no token hash).
+type SessionView struct {
+	ID        string    `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+	SourceIP  string    `json:"source_ip"`
+	UserAgent string    `json:"user_agent"`
+}
+
 type Sessions struct{ pool *pgxpool.Pool }
 
 func NewSessions(pool *pgxpool.Pool) *Sessions { return &Sessions{pool: pool} }
@@ -41,12 +50,14 @@ func (s *Sessions) ActiveUserByTokenHash(ctx context.Context, tokenHash string) 
 	)
 	err := s.pool.QueryRow(ctx, `
 		SELECT u.id, u.username, u.display_name, u.role, u.created_at, u.updated_at, u.password_hash,
+		       u.totp_enabled_at, u.totp_secret, u.totp_last_step,
 		       s.expires_at
 		FROM sessions s
 		JOIN users u ON u.id = s.user_id
 		WHERE s.token_hash = $1 AND s.expires_at > now()`,
 		tokenHash,
-	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.Role, &u.CreatedAt, &u.UpdatedAt, &u.PasswordHash, &expiresAt)
+	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.Role, &u.CreatedAt, &u.UpdatedAt, &u.PasswordHash,
+		&u.TOTPEnabledAt, &u.TOTPSecret, &u.TOTPLastStep, &expiresAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, time.Time{}, ErrNotFound
 	}
@@ -69,11 +80,49 @@ func (s *Sessions) Delete(ctx context.Context, tokenHash string) error {
 	return err
 }
 
-// DeleteOthersForUser revokes all sessions of a user except the provided token hash.
-func (s *Sessions) DeleteOthersForUser(ctx context.Context, userID, keepTokenHash string) error {
-	_, err := s.pool.Exec(ctx, `
+// DeleteOthersForUser revokes all sessions of a user except the provided token hash
+// and returns how many were removed.
+func (s *Sessions) DeleteOthersForUser(ctx context.Context, userID, keepTokenHash string) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `
 		DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2`, userID, keepTokenHash)
-	return err
+	return tag.RowsAffected(), err
+}
+
+// ListForUser returns the user's sessions, newest first.
+func (s *Sessions) ListForUser(ctx context.Context, userID string) ([]SessionView, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, created_at, expires_at, COALESCE(source_ip::text, ''), user_agent
+		FROM sessions
+		WHERE user_id = $1 AND expires_at > now()
+		ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []SessionView{}
+	for rows.Next() {
+		var v SessionView
+		if err := rows.Scan(&v.ID, &v.CreatedAt, &v.ExpiresAt, &v.SourceIP, &v.UserAgent); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+// ByTokenHash resolves one active session view by token hash (for marking the
+// current session in the list).
+func (s *Sessions) ByTokenHash(ctx context.Context, tokenHash string) (SessionView, error) {
+	var v SessionView
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, created_at, expires_at, COALESCE(source_ip::text, ''), user_agent
+		FROM sessions
+		WHERE token_hash = $1 AND expires_at > now()`, tokenHash,
+	).Scan(&v.ID, &v.CreatedAt, &v.ExpiresAt, &v.SourceIP, &v.UserAgent)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return SessionView{}, ErrNotFound
+	}
+	return v, err
 }
 
 // DeleteExpired removes expired sessions (invoked periodically).

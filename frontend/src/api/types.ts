@@ -7,6 +7,8 @@ export interface User {
   role: string
   created_at: string
   updated_at: string
+  // Present when the authenticator is confirmed (2FA active).
+  totp_enabled_at?: string | null
 }
 
 export interface SetupStatus {
@@ -329,6 +331,28 @@ export interface IPAddress {
   last_observed_at?: string | null
   created_at: string
   updated_at: string
+  // Computed on list reads: the latest ARP observation saw a different MAC
+  // than the interface this address is assigned to.
+  observed_conflict?: boolean
+}
+
+// Active login session of the signed-in operator.
+export interface SessionView {
+  id: string
+  created_at: string
+  expires_at: string
+  source_ip: string
+  user_agent: string
+}
+
+export interface SessionList {
+  sessions: SessionView[]
+  current_id: string
+}
+
+export interface TOTPSetup {
+  secret: string
+  otpauth_uri: string
 }
 
 export interface SubnetDetail {
@@ -456,6 +480,7 @@ export interface DashboardStatsV2 extends DashboardStats {
     services_without_host: number
     services_down: number
     certs_expiring: number
+    observed_ip_conflicts: number
   }
 }
 

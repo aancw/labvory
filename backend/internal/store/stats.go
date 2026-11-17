@@ -57,6 +57,9 @@ type AlertsSummary struct {
 	ServicesWithoutHost int `json:"services_without_host"`
 	ServicesDown        int `json:"services_down"`
 	CertsExpiring       int `json:"certs_expiring"`
+	// ObservedIPConflicts counts addresses whose latest ARP observation saw a
+	// different MAC than the interface the address is assigned to.
+	ObservedIPConflicts int `json:"observed_ip_conflicts"`
 }
 
 // AssetStub is a lightweight asset reference for lists.
@@ -162,12 +165,17 @@ func (s *Stats) Summary(ctx context.Context) (DashboardStats, error) {
 	if certsExpiring, err = svc.CountCertsExpiring(ctx, 30); err != nil {
 		return out, err
 	}
+	var macMismatches int
+	if macMismatches, err = NewIPAddresses(s.pool).CountObservedConflicts(ctx, observedConflictWindow); err != nil {
+		return out, err
+	}
 	out.Alerts = AlertsSummary{
 		IPConflicts:         out.Network.IPConflicts,
 		WarrantyExpiring:    warranty,
 		ServicesWithoutHost: noHost,
 		ServicesDown:        servicesDown,
 		CertsExpiring:       certsExpiring,
+		ObservedIPConflicts: macMismatches,
 	}
 	return out, nil
 }

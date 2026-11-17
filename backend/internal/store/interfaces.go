@@ -29,6 +29,20 @@ type Interfaces struct{ pool *pgxpool.Pool }
 
 func NewInterfaces(pool *pgxpool.Pool) *Interfaces { return &Interfaces{pool: pool} }
 
+// MACByID returns the MAC address recorded on one interface ("" when the
+// interface exists but has no MAC).
+func (s *Interfaces) MACByID(ctx context.Context, id string) (string, error) {
+	var mac *string
+	err := s.pool.QueryRow(ctx, `SELECT mac_address FROM network_interfaces WHERE id = $1`, id).Scan(&mac)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil || mac == nil {
+		return "", err
+	}
+	return *mac, nil
+}
+
 // Create adds an interface to an asset.
 func (s *Interfaces) Create(ctx context.Context, ni *NetworkInterface) error {
 	err := s.pool.QueryRow(ctx, `

@@ -1,6 +1,6 @@
 import { useState } from "react"
-import { Link } from "react-router-dom"
-import { ChevronLeftIcon, ChevronRightIcon, NetworkIcon } from "lucide-react"
+import { Link, useSearchParams } from "react-router-dom"
+import { ChevronLeftIcon, ChevronRightIcon, NetworkIcon, ShieldAlertIcon } from "lucide-react"
 
 import { useIPs } from "@/api/hooks"
 import { EmptyState } from "@/components/EmptyState"
@@ -15,14 +15,35 @@ import { formatRelative } from "@/lib/utils"
 const PAGE_SIZE = 100
 
 export function IPAddressesPage() {
+  const [searchParams] = useSearchParams()
   const [qDraft, setQDraft] = useState("")
   const [q, setQ] = useState("")
-  const [status, setStatus] = useState("")
+  // Filters seed from the URL so dashboard alerts (e.g. /ips?status=conflict
+  // or /ips?observed_conflict=1) land on the pre-filtered view.
+  const [status, setStatus] = useState(searchParams.get("status") ?? "")
+  const [observedConflict, setObservedConflict] = useState(
+    searchParams.get("observed_conflict") === "1" || searchParams.get("observed_conflict") === "true",
+  )
   const [offset, setOffset] = useState(0)
 
-  const { data, isLoading } = useIPs({ q, status, limit: PAGE_SIZE, offset })
+  const { data, isLoading } = useIPs({
+    q,
+    status,
+    ...(observedConflict ? { observed_conflict: true } : {}),
+    limit: PAGE_SIZE,
+    offset,
+  })
   const addresses = data?.addresses ?? []
   const total = data?.total ?? 0
+  const filtersActive = q || status || observedConflict
+
+  const clearFilters = () => {
+    setQ("")
+    setQDraft("")
+    setStatus("")
+    setObservedConflict(false)
+    setOffset(0)
+  }
 
   return (
     <>
@@ -58,6 +79,19 @@ export function IPAddressesPage() {
           <option value="conflict">Conflict</option>
           <option value="available">Available (tracked)</option>
         </Select>
+        <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={observedConflict}
+            onChange={(e) => { setObservedConflict(e.target.checked); setOffset(0) }}
+          />
+          MAC mismatches only
+        </label>
+        {filtersActive ? (
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            Clear filters
+          </Button>
+        ) : null}
       </div>
 
       {isLoading ? (
@@ -65,10 +99,10 @@ export function IPAddressesPage() {
       ) : addresses.length === 0 ? (
         <EmptyState
           icon={NetworkIcon}
-          title={q || status ? "No addresses match" : "No tracked addresses yet"}
+          title={filtersActive ? "No addresses match" : "No tracked addresses yet"}
           description={
-            q || status
-              ? "Try clearing the search or status filter."
+            filtersActive
+              ? "Try clearing the search or filters."
               : "Create a subnet and allocate addresses from its page."
           }
         />
@@ -90,7 +124,19 @@ export function IPAddressesPage() {
               <TableBody>
                 {addresses.map((ip) => (
                   <TableRow key={ip.id}>
-                    <TableCell className="font-mono text-xs">{ip.address}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      <span className="inline-flex items-center gap-2">
+                        {ip.address}
+                        {ip.observed_conflict ? (
+                          <span
+                            title="The ARP sweep last saw a different MAC answering at this address than the interface it is assigned to."
+                            className="inline-flex items-center gap-1 rounded border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-xs text-red-600 dark:text-red-400"
+                          >
+                            <ShieldAlertIcon className="size-3" aria-hidden />MAC mismatch
+                          </span>
+                        ) : null}
+                      </span>
+                    </TableCell>
                     <TableCell>
                       <Link to={`/subnets/${ip.subnet_id}`} className="font-mono text-xs hover:underline underline-offset-2">
                         {ip.subnet_cidr}

@@ -22,6 +22,12 @@ type User struct {
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 	PasswordHash string    `json:"-"` // never serialized
+	// Two-factor state. TOTPSecret is stored encrypted; a non-nil
+	// TOTPEnabledAt means the authenticator is active (otherwise any stored
+	// secret is a pending setup enrollment).
+	TOTPEnabledAt *time.Time `json:"totp_enabled_at,omitempty"`
+	TOTPSecret    string     `json:"-"`
+	TOTPLastStep  int64      `json:"-"`
 }
 
 type Users struct{ pool *pgxpool.Pool }
@@ -53,14 +59,16 @@ func (s *Users) Create(ctx context.Context, username, displayName, passwordHash,
 // GetByUsername fetches a user by exact username.
 func (s *Users) GetByUsername(ctx context.Context, username string) (User, error) {
 	return s.scanOne(s.pool.QueryRow(ctx, `
-		SELECT id, username, display_name, role, created_at, updated_at, password_hash
+		SELECT id, username, display_name, role, created_at, updated_at, password_hash,
+		       totp_enabled_at, totp_secret, totp_last_step
 		FROM users WHERE username = $1`, username))
 }
 
 // GetByID fetches a user by id.
 func (s *Users) GetByID(ctx context.Context, id string) (User, error) {
 	return s.scanOne(s.pool.QueryRow(ctx, `
-		SELECT id, username, display_name, role, created_at, updated_at, password_hash
+		SELECT id, username, display_name, role, created_at, updated_at, password_hash,
+		       totp_enabled_at, totp_secret, totp_last_step
 		FROM users WHERE id = $1`, id))
 }
 
@@ -71,9 +79,50 @@ func (s *Users) UpdatePassword(ctx context.Context, id, passwordHash string) err
 	return err
 }
 
+// SetTOTPPending stores an encrypted enrollment secret while 2FA is not yet
+// confirmed. Any previous enrollment (pending or active) is replaced.
+func (s *Users) SetTOTPPending(ctx context.Context, id, encryptedSecret string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE users SET totp_secret = $2, totp_enabled_at = NULL, totp_last_step = 0,
+		       updated_at = now()
+		WHERE id = $1`, id, encryptedSecret)
+	return err
+}
+
+// EnableTOTP confirms the pending enrollment: the stored secret becomes the
+// active one and the matched step seeds the replay guard.
+func (s *Users) EnableTOTP(ctx context.Context, id string, matchedStep int64) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE users SET totp_enabled_at = now(), totp_last_step = $2, updated_at = now()
+		WHERE id = $1 AND totp_secret <> ''`, id, matchedStep)
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
+// DisableTOTP removes the authenticator entirely.
+func (s *Users) DisableTOTP(ctx context.Context, id string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE users SET totp_secret = '', totp_enabled_at = NULL, totp_last_step = 0,
+		       updated_at = now()
+		WHERE id = $1`, id)
+	return err
+}
+
+// AdvanceTOTPStep records the matched step and refuses a replay: it succeeds
+// only when the stored guard is strictly older. Returns false on replay.
+func (s *Users) AdvanceTOTPStep(ctx context.Context, id string, step int64) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE users SET totp_last_step = $2 WHERE id = $1 AND totp_last_step < $2`,
+		id, step)
+	return tag.RowsAffected() == 1, err
+}
+
 func (s *Users) scanOne(row pgx.Row) (User, error) {
 	u := User{}
-	err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.Role, &u.CreatedAt, &u.UpdatedAt, &u.PasswordHash)
+	err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.Role, &u.CreatedAt, &u.UpdatedAt,
+		&u.PasswordHash, &u.TOTPEnabledAt, &u.TOTPSecret, &u.TOTPLastStep)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, ErrNotFound
 	}

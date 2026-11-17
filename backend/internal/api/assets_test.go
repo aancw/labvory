@@ -14,6 +14,7 @@ import (
 	"github.com/aancw/lanvory/internal/auth"
 	"github.com/aancw/lanvory/internal/config"
 	"github.com/aancw/lanvory/internal/db"
+	"github.com/aancw/lanvory/internal/secrets"
 	"github.com/aancw/lanvory/internal/store"
 )
 
@@ -38,7 +39,8 @@ func TestAssetLifecycle(t *testing.T) {
 
 	cfg := config.Config{Env: "production", CookieSecure: false, SessionTTL: time.Hour}
 	logger := testLogger()
-	authSvc := auth.NewService(store.NewUsers(pool), store.NewSessions(pool), store.NewAuditEvents(pool), logger, cfg.SessionTTL)
+	var box *secrets.Box
+	authSvc := auth.NewService(store.NewUsers(pool), store.NewSessions(pool), store.NewAuditEvents(pool), logger, cfg.SessionTTL, box)
 	srv := NewServer(cfg, logger, pool, authSvc)
 	router := srv.Routes()
 	ts := httptest.NewServer(router)

@@ -94,7 +94,7 @@ func SyncARP(ctx context.Context, pool *pgxpool.Pool, integ store.Integration) (
 	integrations := store.NewIntegrations(pool)
 
 	seenIPs := map[string]bool{}
-	skipped, macsMatched, macsUnknown := 0, 0, 0
+	skipped, macsMatched, macsUnknown, macMismatches := 0, 0, 0, 0
 	assetSightings := map[string]map[string]any{} // assetID → last arp observation
 	for _, e := range entries {
 		if !e.IP.IsValid() || e.MAC == "" || !isUnicastMAC(e.MAC) {
@@ -242,14 +242,24 @@ func SyncARP(ctx context.Context, pool *pgxpool.Pool, integ store.Integration) (
 			continue
 		}
 		// Already tracked (this sync or a previous one) → leave it alone;
-		// operator-owned rows are never overwritten.
-		if _, err := ips.GetByAddress(ctx, subnetID, ipStr); err == nil {
+		// operator-owned rows are never overwritten. The observed MAC is
+		// still compared against the assigned interface so a device that
+		// took over someone else's address shows up as a conflict.
+		existing, err := ips.GetByAddress(ctx, subnetID, ipStr)
+		if err == nil {
+			mismatch, nerr := noteObservedMAC(ctx, ips, ifaces, existing, mac, now)
+			if nerr != nil {
+				return nil, fmt.Errorf("record observed mac on %s: %w", ipStr, nerr)
+			}
+			if mismatch {
+				macMismatches++
+			}
 			continue
 		} else if !errors.Is(err, store.ErrNotFound) {
 			return nil, fmt.Errorf("lookup %s: %w", ipStr, err)
 		}
 		ifaceID := ifaceIDs[mac]
-		err := ips.Allocate(ctx, &store.IPAddress{
+		err = ips.Allocate(ctx, &store.IPAddress{
 			SubnetID:    subnetID,
 			Address:     ipStr,
 			Status:      "assigned",
@@ -278,6 +288,7 @@ func SyncARP(ctx context.Context, pool *pgxpool.Pool, integ store.Integration) (
 		"subnets_created":      subnetsCreated,
 		"ips_registered":       ipsRegistered,
 		"allocation_conflicts": allocationConflicts,
+		"mac_mismatches":       macMismatches,
 		"skipped":              skipped,
 		"macs_duplicate":       duplicateMACs,
 	}
@@ -291,6 +302,58 @@ func SyncARP(ctx context.Context, pool *pgxpool.Pool, integ store.Integration) (
 		summary["note"] = "no devices responded — check the interface/CIDR config, raw packet privileges (NET_RAW on Linux; BPF via root on modern macOS), and that the server sits on the scanned network (docker: macvlan override)"
 	}
 	return summary, nil
+}
+
+// noteObservedMAC compares the MAC observed at an address with the MAC on the
+// allocation's assigned interface and records the finding under the
+// allocation's metadata.observed.arp — a mismatch means some other device is
+// answering at a declared address. A fresh matching observation clears a
+// stale mismatch. Declared fields are never touched. Returns true when the
+// latest observation recorded a mismatch.
+func noteObservedMAC(ctx context.Context, ips *store.IPAddresses, ifaces *store.Interfaces, ip store.IPAddress, observedMAC string, now time.Time) (bool, error) {
+	if ip.InterfaceID == nil || *ip.InterfaceID == "" {
+		return false, nil // nothing declared to compare against
+	}
+	declaredRaw, err := ifaces.MACByID(ctx, *ip.InterfaceID)
+	if err != nil || declaredRaw == "" {
+		return false, err // interface gone or MAC-less: no comparison possible
+	}
+	declared := normalizeMAC(declaredRaw)
+	if declared == "" {
+		return false, nil
+	}
+	matches := declared == observedMAC
+	_, hadPrev := observedArpEntry(ip.Metadata)
+	if matches && (!hadPrev || prevArpMatched(ip.Metadata)) {
+		return false, nil // expected device answered: only stale mismatches need clearing
+	}
+	obs := map[string]any{
+		"mac":           observedMAC,
+		"interface_mac": declaredRaw,
+		"matches":       matches,
+		"checked_at":    now.Format(time.RFC3339),
+	}
+	if err := ips.SetObservedSub(ctx, ip.ID, "arp", obs); err != nil {
+		return false, err
+	}
+	return !matches, nil
+}
+
+// observedArpEntry returns the previous metadata.observed.arp entry, if any.
+func observedArpEntry(m map[string]any) (map[string]any, bool) {
+	if m == nil {
+		return nil, false
+	}
+	obs, _ := m["observed"].(map[string]any)
+	arp, _ := obs["arp"].(map[string]any)
+	return arp, arp != nil
+}
+
+// prevArpMatched reports whether the previous observation matched.
+func prevArpMatched(m map[string]any) bool {
+	arp, _ := observedArpEntry(m)
+	matched, _ := arp["matches"].(bool)
+	return matched
 }
 
 // ensureDiscoveredInterface finds or creates the LAN interface carrying the

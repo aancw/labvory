@@ -14,6 +14,7 @@ import (
 	"github.com/aancw/lanvory/internal/auth"
 	"github.com/aancw/lanvory/internal/config"
 	"github.com/aancw/lanvory/internal/db"
+	"github.com/aancw/lanvory/internal/secrets"
 	"github.com/aancw/lanvory/internal/store"
 )
 
@@ -45,9 +46,20 @@ func main() {
 		seedCancel()
 	}
 
+	// The secrets box is optional: without LV_SECRET_KEY, integration secrets
+	// and two-factor enrollment are unavailable.
+	var box *secrets.Box
+	if cfg.SecretKey != "" {
+		if b, err := secrets.NewBox(cfg.SecretKey); err != nil {
+			logger.Warn("secret key unusable — secrets and 2FA disabled", "error", err)
+		} else {
+			box = b
+		}
+	}
+
 	authSvc := auth.NewService(
 		store.NewUsers(pool), store.NewSessions(pool), store.NewAuditEvents(pool),
-		logger, cfg.SessionTTL,
+		logger, cfg.SessionTTL, box,
 	)
 
 	apiSrv := api.NewServer(cfg, logger, pool, authSvc)
