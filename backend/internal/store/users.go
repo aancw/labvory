@@ -119,6 +119,55 @@ func (s *Users) AdvanceTOTPStep(ctx context.Context, id string, step int64) (boo
 	return tag.RowsAffected() == 1, err
 }
 
+// List returns all accounts, oldest first (password hash is never serialized).
+func (s *Users) List(ctx context.Context) ([]User, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, username, display_name, role, created_at, updated_at, password_hash,
+		       totp_enabled_at, totp_secret, totp_last_step
+		FROM users ORDER BY created_at`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []User{}
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Username, &u.DisplayName, &u.Role, &u.CreatedAt, &u.UpdatedAt,
+			&u.PasswordHash, &u.TOTPEnabledAt, &u.TOTPSecret, &u.TOTPLastStep); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// CountAdmins returns the number of admin accounts (last-admin guard).
+func (s *Users) CountAdmins(ctx context.Context) (int, error) {
+	var n int
+	err := s.pool.QueryRow(ctx, `SELECT count(*) FROM users WHERE role = 'admin'`).Scan(&n)
+	return n, err
+}
+
+// UpdateProfile changes an account's display name and role.
+func (s *Users) UpdateProfile(ctx context.Context, id, displayName, role string) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE users SET display_name = $2, role = $3, updated_at = now() WHERE id = $1`,
+		id, displayName, role)
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
+// Delete removes an account; its sessions cascade.
+func (s *Users) Delete(ctx context.Context, id string) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
 func (s *Users) scanOne(row pgx.Row) (User, error) {
 	u := User{}
 	err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.Role, &u.CreatedAt, &u.UpdatedAt,

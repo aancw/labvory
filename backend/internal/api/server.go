@@ -148,16 +148,31 @@ func (s *Server) Routes() http.Handler {
 		r.With(s.requireAuth).Get("/auth/sessions", s.handleListSessions)
 		r.With(s.requireAuth).Delete("/auth/sessions/others", s.handleRevokeOtherSessions)
 
-		// Authenticated application APIs.
+		// Authenticated application APIs. Role enforcement (viewer read-only,
+		// operator without accounts/settings/tokens) runs after auth resolves
+		// the caller; MCP dispatch is admin-equivalent by design.
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireAuth)
+			r.Use(s.enforceRoles)
 			s.mountDataRoutes(r)
 		})
 
+		// Account management (administrators only).
+		r.Route("/users", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Use(s.requireAdmin)
+			r.Get("/", s.handleListUsers)
+			r.Post("/", s.handleCreateUser)
+			r.Put("/{userID}", s.handleUpdateUser)
+			r.Delete("/{userID}", s.handleDeleteUser)
+		})
+
 		// API token management (session + CSRF; tokens power bearer auth for
-		// machine clients such as MCP agents).
+		// machine clients such as MCP agents). Administrator-only: tokens act
+		// with their owner's role on the REST API and admin-equivalent on MCP.
 		r.Route("/tokens", func(r chi.Router) {
 			r.Use(s.requireAuth)
+			r.Use(s.requireAdmin)
 			r.Get("/", s.handleListTokens)
 			r.Post("/", s.handleCreateToken)
 			r.Delete("/{tokenID}", s.handleRevokeToken)
@@ -207,6 +222,7 @@ func (s *Server) mountDataRoutes(r chi.Router) {
 			r.Delete("/", s.handleDeleteAsset)
 			r.Post("/interfaces", s.handleCreateInterface)
 			r.Post("/relationships", s.handleCreateRelationship)
+			r.Post("/check", s.handleCheckAsset)
 		})
 	})
 	r.Route("/interfaces", func(r chi.Router) {

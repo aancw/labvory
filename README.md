@@ -16,7 +16,7 @@ Lanvory replaces scattered spreadsheets and notes. It runs locally as a Go API, 
 - **Integrations:** read-only sync for Proxmox, Docker, Kubernetes, Cloudflare, AdGuard Home, OPNsense (DHCP leases), DNS, and ARP discovery, with optional ICMP checks. Observed data stays separate from operator-maintained fields. Planned connectors are labeled in the UI.
 - **Import and export:** preview and map CSV columns before import; export and restore inventory as JSON.
 - **Agent access:** an MCP server at `/mcp` exposes CRUD operations to agents using revocable, database-backed tokens. See [the MCP guide](docs/MCP.md).
-- **Security and auditing:** Argon2id password hashing, optional TOTP two-factor authentication, server-side sessions with per-device visibility and remote sign-out, CSRF protection, rate-limited authentication, webhook alerts for sign-ins from new devices and failed-login bursts, an activity log with optional automatic retention, and encrypted integration secrets.
+- **Security and auditing:** Argon2id password hashing, optional TOTP two-factor authentication, multi-user accounts with admin/operator/viewer roles, server-side sessions with per-device visibility and remote sign-out, CSRF protection, rate-limited authentication, webhook alerts for sign-ins from new devices and failed-login bursts, an activity log with optional automatic retention, and encrypted integration secrets.
 
 ## Run with Docker Compose
 

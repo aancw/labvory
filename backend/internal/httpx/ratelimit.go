@@ -1,7 +1,6 @@
 package httpx
 
 import (
-	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -35,18 +34,10 @@ func NewIPRateLimiter(every time.Duration, burst int) *IPRateLimiter {
 
 // Allow reports whether the request from this remote address is permitted.
 func (l *IPRateLimiter) Allow(r *http.Request) bool {
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		ip = r.RemoteAddr
-	}
-	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		// Behind a trusted reverse proxy the first hop is the client.
-		if host, _, err := net.SplitHostPort(fwd); err == nil {
-			ip = host
-		} else {
-			ip = fwd
-		}
-	}
+	// ClientIP matches the audit/logging resolver: proxy headers count only
+	// from local-network peers, so attackers cannot rotate limits by forging
+	// X-Forwarded-For when the API is exposed directly.
+	ip := ClientIP(r)
 
 	l.mu.Lock()
 	defer l.mu.Unlock()

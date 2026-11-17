@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"errors"
-	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -19,18 +18,11 @@ const sessionTokenKey ctxKey = "session_token"
 
 const sessionCookieName = "lv_session"
 
-// clientIP extracts the client address, preferring the proxy-provided value.
+// clientIP extracts the client address via the shared resolver: the proxy
+// header is honored only from local-network peers, and multi-hop values are
+// parsed to their first entry so INET columns always get a clean address.
 func clientIP(r *http.Request) string {
-	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		if host, _, err := net.SplitHostPort(fwd); err == nil {
-			return host
-		}
-		return fwd
-	}
-	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		return host
-	}
-	return r.RemoteAddr
+	return httpx.ClientIP(r)
 }
 
 // requireAuth authenticates /api/v1 requests via session cookie OR an

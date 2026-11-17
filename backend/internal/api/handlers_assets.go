@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/aancw/lanvory/internal/httpx"
+	"github.com/aancw/lanvory/internal/integrations"
 	"github.com/aancw/lanvory/internal/store"
 )
 
@@ -212,6 +214,51 @@ func emptyToNil(s *string) *string {
 		return nil
 	}
 	return s
+}
+
+// handleCheckAsset runs an on-demand ICMP reachability probe against the
+// asset's hostname (preferred) or primary IP and records the observation
+// under metadata.observed.icmp — the same shape the scheduled connector uses.
+func (s *Server) handleCheckAsset(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "assetID")
+	if !isUUID(id) {
+		httpx.Error(w, r, http.StatusBadRequest, "invalid_id", "Invalid asset id.", nil)
+		return
+	}
+	asset, err := s.assets.GetByID(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		httpx.Error(w, r, http.StatusNotFound, "not_found", "Asset not found.", nil)
+		return
+	}
+	if err != nil {
+		s.logger.Error("asset check: load failed", "error", err)
+		httpx.Error(w, r, http.StatusInternalServerError, "internal", "Could not check asset.", nil)
+		return
+	}
+	target := asset.Hostname
+	if target == "" && asset.PrimaryIP != nil {
+		target = *asset.PrimaryIP
+	}
+	if strings.TrimSpace(target) == "" {
+		httpx.Error(w, r, http.StatusUnprocessableEntity, "no_target",
+			"Nothing to check: the asset has neither a hostname nor a tracked IP address.", nil)
+		return
+	}
+
+	reachable := integrations.ProbeHost(r.Context(), target, 2)
+	state := "offline"
+	if reachable {
+		state = "online"
+	}
+	if err := store.NewIntegrations(s.pool).SetObservedSub(r.Context(), asset.ID, "icmp", map[string]any{
+		"status": state, "target": target, "checked_at": time.Now().UTC().Format(time.RFC3339),
+	}); err != nil {
+		s.logger.Error("asset check: record observation failed", "error", err)
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"ok": true, "reachable": reachable, "target": target, "status": state,
+	})
 }
 
 func (s *Server) handleListAssets(w http.ResponseWriter, r *http.Request) {

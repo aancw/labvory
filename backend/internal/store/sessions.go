@@ -125,6 +125,12 @@ func (s *Sessions) ByTokenHash(ctx context.Context, tokenHash string) (SessionVi
 	return v, err
 }
 
+// DeleteAllForUser revokes every session of a user (admin password reset).
+func (s *Sessions) DeleteAllForUser(ctx context.Context, userID string) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1`, userID)
+	return tag.RowsAffected(), err
+}
+
 // DeleteExpired removes expired sessions (invoked periodically).
 func (s *Sessions) DeleteExpired(ctx context.Context) error {
 	_, err := s.pool.Exec(ctx, `DELETE FROM sessions WHERE expires_at < now()`)

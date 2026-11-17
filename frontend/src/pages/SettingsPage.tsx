@@ -9,6 +9,8 @@ import {
   useApiTokens,
   useChangePassword,
   useCreateApiToken,
+  useCreateUser,
+  useDeleteUser,
   useMe,
   useRevokeApiToken,
   useRevokeOtherSessions,
@@ -19,8 +21,10 @@ import {
   useTOTPEnable,
   useTOTPSetup,
   useUpdateSettings,
+  useUpdateUser,
+  useUsers,
 } from "@/api/hooks"
-import type { ApiToken, ApiTokenCreated, TOTPSetup } from "@/api/types"
+import type { ApiToken, ApiTokenCreated, TOTPSetup, User } from "@/api/types"
 import { PageHeader } from "@/components/PageHeader"
 import { useTheme } from "@/components/theme-provider"
 import { Badge } from "@/components/ui/badge"
@@ -46,6 +50,7 @@ import { cn } from "@/lib/utils"
 export function SettingsPage() {
   const { data: me } = useMe()
   const user = me?.user
+  const isAdmin = user?.role === "admin"
 
   return (
     <>
@@ -61,10 +66,13 @@ export function SettingsPage() {
         <AppearanceCard />
         <SecurityCard />
         <SessionsCard />
+        {isAdmin ? <UsersCard currentUserId={user?.id ?? ""} /> : null}
         <AccountCard username={user?.username ?? ""} role={user?.role ?? ""} />
-        <div className="lg:col-span-2">
-          <ApiTokensCard />
-        </div>
+        {isAdmin ? (
+          <div className="lg:col-span-2">
+            <ApiTokensCard />
+          </div>
+        ) : null}
       </div>
     </>
   )
@@ -580,6 +588,236 @@ function shortenUserAgent(ua: string): string {
     : null
   if (!name && !os) return ua.length > 60 ? ua.slice(0, 57) + "…" : ua
   return [name, os].filter(Boolean).join(" · ")
+}
+
+// UsersCard is the administrator's account manager: create accounts, edit
+// roles/display names, reset passwords, and delete — with last-admin and
+// self-deletion guards enforced server-side.
+function UsersCard({ currentUserId }: { currentUserId: string }) {
+  const { data, isLoading } = useUsers()
+  const createUser = useCreateUser()
+  const updateUser = useUpdateUser()
+  const deleteUser = useDeleteUser()
+  const [addOpen, setAddOpen] = useState(false)
+  const [username, setUsername] = useState("")
+  const [displayName, setDisplayName] = useState("")
+  const [password, setPassword] = useState("")
+  const [role, setRole] = useState("viewer")
+  const [editing, setEditing] = useState<User | null>(null)
+  const [editName, setEditName] = useState("")
+  const [editRole, setEditRole] = useState("viewer")
+  const [editPassword, setEditPassword] = useState("")
+
+  const users = data?.users ?? []
+
+  const openAdd = () => {
+    setUsername("")
+    setDisplayName("")
+    setPassword("")
+    setRole("viewer")
+    setAddOpen(true)
+  }
+
+  const submitAdd = () => {
+    createUser.mutate(
+      { username: username.trim(), display_name: displayName.trim(), password, role },
+      {
+        onSuccess: () => {
+          toast.success(`Account ${username.trim()} created.`)
+          setAddOpen(false)
+        },
+        onError: (err) => toast.error(isApiError(err) ? err.message : "Could not create account."),
+      },
+    )
+  }
+
+  const openEdit = (u: User) => {
+    setEditing(u)
+    setEditName(u.display_name)
+    setEditRole(u.role)
+    setEditPassword("")
+  }
+
+  const submitEdit = () => {
+    if (!editing) return
+    updateUser.mutate(
+      {
+        id: editing.id,
+        payload: {
+          display_name: editName.trim(),
+          role: editRole,
+          ...(editPassword ? { password: editPassword } : {}),
+        },
+      },
+      {
+        onSuccess: () => {
+          toast.success(
+            editPassword
+              ? `Account updated — ${editing.username}'s sessions were signed out.`
+              : "Account updated.",
+          )
+          setEditing(null)
+        },
+        onError: (err) => toast.error(isApiError(err) ? err.message : "Could not update account."),
+      },
+    )
+  }
+
+  const remove = (u: User) => {
+    deleteUser.mutate(u.id, {
+      onSuccess: () => toast.success(`Account ${u.username} deleted.`),
+      onError: (err) => toast.error(isApiError(err) ? err.message : "Could not delete account."),
+    })
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-sm">Accounts</CardTitle>
+            <CardDescription>
+              Team access. Operators manage the inventory; viewers are read-only.
+            </CardDescription>
+          </div>
+          <Button variant="outline" size="sm" onClick={openAdd}>
+            Add account
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Username</TableHead>
+                <TableHead>Display name</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="w-0 text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users.map((u) => (
+                <TableRow key={u.id}>
+                  <TableCell className="font-medium">
+                    {u.username}
+                    {u.id === currentUserId ? (
+                      <Badge className="ml-2 align-middle" variant="secondary">You</Badge>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{u.display_name || "—"}</TableCell>
+                  <TableCell>
+                    <Badge variant={u.role === "admin" ? "default" : "secondary"}>{u.role}</Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{formatDateTime(u.created_at)}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="inline-flex justify-end gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(u)}>
+                        Edit
+                      </Button>
+                      {u.id === currentUserId ? null : (
+                        <ConfirmDialog
+                          trigger={
+                            <Button variant="ghost" size="sm" className="text-destructive">
+                              Delete
+                            </Button>
+                          }
+                          title={`Delete ${u.username}?`}
+                          description="The account and its sessions are removed. Inventory data is unaffected."
+                          confirmLabel="Delete account"
+                          onConfirm={() => remove(u)}
+                        />
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+
+        {/* Add account */}
+        <Dialog open={addOpen} onOpenChange={setAddOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Add account</DialogTitle>
+              <DialogDescription>Sign-in credentials for a teammate or agent operator.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="new-user-username">Username *</Label>
+                <Input id="new-user-username" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="new-user-display">Display name</Label>
+                <Input id="new-user-display" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="new-user-password">Password *</Label>
+                <Input id="new-user-password" type="password" autoComplete="new-password" value={password}
+                  onChange={(e) => setPassword(e.target.value)} />
+                <p className="text-xs text-muted-foreground">At least 10 characters.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="new-user-role">Role</Label>
+                <Select id="new-user-role" value={role} onChange={(e) => setRole(e.target.value)}>
+                  <option value="viewer">Viewer — read-only</option>
+                  <option value="operator">Operator — manage inventory</option>
+                  <option value="admin">Admin — everything</option>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setAddOpen(false)}>Cancel</Button>
+              <Button size="sm" onClick={submitAdd} disabled={createUser.isPending || !username.trim() || password.length < 10}>
+                {createUser.isPending ? "Creating…" : "Create account"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit account */}
+        <Dialog open={editing !== null} onOpenChange={(v) => !v && setEditing(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Edit {editing?.username}</DialogTitle>
+              <DialogDescription>
+                A password reset signs the account out of every device.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-user-display">Display name</Label>
+                <Input id="edit-user-display" value={editName} onChange={(e) => setEditName(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-user-role">Role</Label>
+                <Select id="edit-user-role" value={editRole} onChange={(e) => setEditRole(e.target.value)}>
+                  <option value="viewer">Viewer — read-only</option>
+                  <option value="operator">Operator — manage inventory</option>
+                  <option value="admin">Admin — everything</option>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-user-password">New password (optional)</Label>
+                <Input id="edit-user-password" type="password" autoComplete="new-password" value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)} placeholder="leave blank to keep" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
+              <Button size="sm" onClick={submitEdit} disabled={updateUser.isPending}>
+                {updateUser.isPending ? "Saving…" : "Save changes"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
+  )
 }
 
 const passwordSchema = z

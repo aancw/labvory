@@ -701,6 +701,57 @@ export function useUpdateNetworkContext() {
   })
 }
 
+// ---------- user management (admin) ----------
+
+export function useUsers() {
+  return useQuery({
+    queryKey: ["users"],
+    queryFn: () => api.get<{ users: User[] }>("/api/v1/users"),
+  })
+}
+
+export function useCreateUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { username: string; display_name: string; password: string; role: string }) =>
+      api.post<{ user: User }>("/api/v1/users", payload),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["users"] }),
+  })
+}
+
+export function useUpdateUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { id: string; payload: { display_name?: string; role?: string; password?: string } }) =>
+      api.put<{ ok: boolean }>(`/api/v1/users/${input.id}`, input.payload),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["users"] })
+      void qc.invalidateQueries({ queryKey: ["me"] })
+    },
+  })
+}
+
+export function useDeleteUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.delete<{ ok: boolean }>(`/api/v1/users/${id}`),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["users"] }),
+  })
+}
+
+// ---------- asset reachability check ----------
+
+export function useCheckAsset() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.post<{ ok: boolean; reachable: boolean; target: string; status: string }>(
+        `/api/v1/assets/${id}/check`,
+      ),
+    onSuccess: (_data, id) => void qc.invalidateQueries({ queryKey: ["asset", id] }),
+  })
+}
+
 // ---------- services (Phase 4) ----------
 
 export function useServices(filters: { q?: string; category?: string; environment?: string; deployment_type?: string } = {}) {

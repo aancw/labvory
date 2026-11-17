@@ -7,6 +7,7 @@ import {
   MapPinIcon,
   PencilIcon,
   PlusIcon,
+  RadarIcon,
   ScrollTextIcon,
   TagIcon,
   Trash2Icon,
@@ -16,6 +17,7 @@ import {
 import { isApiError } from "@/api/client"
 import {
   useAsset,
+  useCheckAsset,
   useCreateInterface,
   useCreateRelationship,
   useDeleteAsset,
@@ -50,6 +52,21 @@ export function AssetDetailPage() {
   const navigate = useNavigate()
   const { data, isLoading, isError, error } = useAsset(id)
   const deleteAsset = useDeleteAsset()
+  const check = useCheckAsset()
+
+  const runCheck = () => {
+    if (!id) return
+    check.mutate(id, {
+      onSuccess: (res) => {
+        if (res.reachable) {
+          toast.success(`Reachable — ${res.target} answered the ICMP check.`)
+        } else {
+          toast.error(`Unreachable — no ICMP reply from ${res.target}.`)
+        }
+      },
+      onError: (err) => toast.error(isApiError(err) ? err.message : "Check failed."),
+    })
+  }
 
   if (isLoading) {
     return <div className="flex justify-center pt-16"><Spinner className="size-6 text-muted-foreground" /></div>
@@ -100,6 +117,16 @@ export function AssetDetailPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={runCheck}
+              disabled={check.isPending}
+              title="Ping this asset now (ICMP) and record the result as observed state"
+            >
+              <RadarIcon className={check.isPending ? "size-4 animate-pulse" : "size-4"} aria-hidden />
+              {check.isPending ? "Checking…" : "Check now"}
+            </Button>
             <AssetFormDialog asset={asset} trigger={
               <Button variant="outline" size="sm"><PencilIcon className="size-4" aria-hidden />Edit</Button>
             } />
