@@ -18,6 +18,21 @@ var settingsSchema = map[string]func(v json.RawMessage) (json.RawMessage, string
 	"instance.name":             validateStringSetting(1, 64),
 	"theme.default":             validateStringSetting(0, 16),
 	"notifications.webhook_url": validateWebhookURL,
+	"audit.retention_days":      validateIntSetting(0, 3650),
+}
+
+// validateIntSetting accepts an integer inside [min, max].
+func validateIntSetting(min, max int) func(json.RawMessage) (json.RawMessage, string) {
+	return func(v json.RawMessage) (json.RawMessage, string) {
+		var n int
+		if err := json.Unmarshal(v, &n); err != nil {
+			return nil, "must be an integer"
+		}
+		if n < min || n > max {
+			return nil, "out of range"
+		}
+		return json.RawMessage(mustMarshal(n)), ""
+	}
 }
 
 // validateWebhookURL accepts an empty string (notifications off) or an

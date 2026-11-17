@@ -9,6 +9,7 @@ import {
   PencilIcon,
   PlusIcon,
   ScrollTextIcon,
+  ShieldCheckIcon,
   Trash2Icon,
 } from "lucide-react"
 
@@ -23,8 +24,8 @@ import {
   useService,
   useUpdateService,
 } from "@/api/hooks"
-import type { ServiceEndpoint } from "@/api/types"
-import { formatRelative } from "@/lib/utils"
+import type { EndpointUptime, ServiceEndpoint, ServiceUptime } from "@/api/types"
+import { cn, formatRelative } from "@/lib/utils"
 
 import { AssetPicker } from "@/components/AssetPicker"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
@@ -133,7 +134,7 @@ export function ServiceDetailPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <EndpointsCard serviceId={service.id} endpoints={endpoints} />
+        <EndpointsCard serviceId={service.id} endpoints={endpoints} uptime={data.uptime ?? {}} />
         <DeploymentsCard serviceId={service.id} deployments={deployments} />
       </div>
 
@@ -209,11 +210,65 @@ const HEALTH_DOT: Record<"up" | "down" | "unknown", string> = {
   unknown: "bg-zinc-400",
 }
 
+const CERT_WARN_DAYS = 30
+
+// CertChip surfaces the leaf certificate observed during the last HTTPS
+// health check. Green once far out, amber inside the warning window, red once
+// expired; hidden until a TLS-protected probe has succeeded.
+function CertChip({ endpoint: e }: { endpoint: ServiceEndpoint }) {
+  if (!e.cert_not_after) return null
+  const expiresAt = new Date(e.cert_not_after)
+  const days = Math.floor((expiresAt.getTime() - Date.now()) / 86_400_000)
+  const expired = days < 0
+  const expiring = days <= CERT_WARN_DAYS
+  const tip = `${e.cert_subject || "leaf certificate"} · ${
+    expired ? `expired ${-days} day${-days === 1 ? "" : "s"} ago` : `expires in ${days} day${days === 1 ? "" : "s"}`
+  } (${formatDateTime(e.cert_not_after)})`
+  return (
+    <span
+      title={tip}
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-xs",
+        expired
+          ? "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400"
+          : expiring
+            ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+            : "text-muted-foreground",
+      )}
+    >
+      <ShieldCheckIcon className="size-3" aria-hidden />
+      {expired ? `expired ${-days}d` : `${days}d`}
+    </span>
+  )
+}
+
+// UptimeSpark renders the recent probe history as a bar strip plus the 7-day
+// uptime percentage. Samples arrive oldest-first from the API.
+function UptimeSpark({ up }: { up: EndpointUptime | undefined }) {
+  if (!up || up.checks.length === 0) return null
+  const pct = (v: number | null) => (v == null ? "—" : `${v.toFixed(1)}%`)
+  const tip = `Uptime 24h: ${pct(up.up_24h)} · 7d: ${pct(up.up_7d)} — last ${up.checks.length} checks, green = up`
+  return (
+    <span title={tip} className="inline-flex shrink-0 items-center gap-1.5">
+      <span className="flex items-center gap-[2px]" aria-label={tip}>
+        {up.checks.map((c, i) => (
+          <span
+            key={i}
+            className={cn("h-3 w-[3px] rounded-sm", c.up ? "bg-emerald-500" : "bg-red-500")}
+          />
+        ))}
+      </span>
+      <span className="w-11 text-right text-xs tabular-nums text-muted-foreground">{pct(up.up_7d)}</span>
+    </span>
+  )
+}
+
 function EndpointsCard({
-  serviceId, endpoints,
+  serviceId, endpoints, uptime,
 }: {
   serviceId: string
   endpoints: ServiceEndpoint[]
+  uptime: ServiceUptime
 }) {
   const create = useCreateServiceEndpoint()
   const remove = useDeleteServiceEndpoint()
@@ -272,6 +327,8 @@ function EndpointsCard({
                     {e.label || "—"}{e.port != null ? ` :${e.port}` : ""}
                   </span>
                 )}
+                <CertChip endpoint={e} />
+                {e.health_enabled ? <UptimeSpark up={uptime[e.id]} /> : null}
                 {e.is_external ? <span className="text-xs text-muted-foreground">external</span> : null}
                 {(() => {
                   const state = endpointHealth(e)

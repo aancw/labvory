@@ -41,6 +41,7 @@ export function SettingsPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <InstanceCard />
         <NotificationsCard />
+        <RetentionCard />
         <AppearanceCard />
         <SecurityCard />
         <AccountCard username={user?.username ?? ""} role={user?.role ?? ""} />
@@ -178,6 +179,75 @@ function NotificationsCard() {
                 {test.isPending ? "Sending…" : "Send test"}
               </Button>
             </div>
+          </form>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function RetentionCard() {
+  const { data, isLoading } = useSettings()
+  const updateSettings = useUpdateSettings()
+  const [days, setDays] = useState("")
+
+  useEffect(() => {
+    const value = data?.settings["audit.retention_days"]
+    if (typeof value === "number") setDays(String(value))
+  }, [data])
+
+  const save = () => {
+    const parsed = Number(days)
+    const clamped = Number.isFinite(parsed) ? Math.max(0, Math.min(3650, Math.round(parsed))) : 0
+    updateSettings.mutate(
+      { settings: { "audit.retention_days": clamped } },
+      {
+        onSuccess: () => {
+          setDays(String(clamped))
+          toast.success("Audit retention saved.")
+        },
+        onError: (err) => toast.error(isApiError(err) ? err.message : "Could not save settings."),
+      },
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Audit retention</CardTitle>
+        <CardDescription>
+          How long change history (the Activity log) is kept before the scheduler removes it daily.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-9 w-full" />
+        ) : (
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault()
+              save()
+            }}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="audit-retention">Retention (days)</Label>
+              <Input
+                id="audit-retention"
+                type="number"
+                min={0}
+                max={3650}
+                value={days}
+                onChange={(e) => setDays(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                0 keeps every audit event forever (pruning disabled). Health-flap events accumulate
+                over time, so a window like 180 or 365 days keeps the log fast on long-running instances.
+              </p>
+            </div>
+            <Button type="submit" size="sm" disabled={updateSettings.isPending}>
+              {updateSettings.isPending ? "Saving…" : "Save changes"}
+            </Button>
           </form>
         )}
       </CardContent>

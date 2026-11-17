@@ -34,3 +34,25 @@ func TestDue(t *testing.T) {
 		})
 	}
 }
+
+func TestClassifyCert(t *testing.T) {
+	now := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name     string
+		notAfter time.Time
+		want     certState
+	}{
+		{"expired yesterday", now.Add(-24 * time.Hour), certExpired},
+		{"expired just now", now.Add(-time.Second), certExpired},
+		{"inside warn window", now.Add(10 * 24 * time.Hour), certExpiring},
+		{"last day of warn window", now.Add(certWarnDays*24*time.Hour - time.Second), certExpiring},
+		{"outside warn window", now.Add(31 * 24 * time.Hour), certOK},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := classifyCert(tc.notAfter, now); got != tc.want {
+				t.Fatalf("classifyCert() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

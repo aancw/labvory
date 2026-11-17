@@ -38,6 +38,14 @@ func (s *AuditEvents) Record(ctx context.Context, e AuditEvent) error {
 	return err
 }
 
+// Prune deletes audit events older than the retention window and returns how
+// many rows were removed. Used by the scheduler to honor audit.retention_days.
+func (s *AuditEvents) Prune(ctx context.Context, olderThanDays int) (int64, error) {
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM audit_events WHERE occurred_at < now() - make_interval(days => $1)`, olderThanDays)
+	return tag.RowsAffected(), err
+}
+
 // List returns the most recent audit events, optionally filtered by entity type
 // and action, with a hard upper bound.
 func (s *AuditEvents) List(ctx context.Context, limit, offset int, entityType, action string) ([]AuditEvent, int, error) {

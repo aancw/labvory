@@ -157,8 +157,14 @@ func (s *Server) writeServiceDetail(w http.ResponseWriter, r *http.Request, id s
 	if err != nil {
 		s.logger.Error("service activity failed", "error", err)
 	}
+	uptime, err := s.services.ServiceUptime(ctx, id)
+	if err != nil {
+		s.logger.Error("service uptime failed", "error", err)
+		uptime = map[string]store.EndpointUptime{}
+	}
 	httpx.WriteJSON(w, status, map[string]any{
 		"service": v, "endpoints": endpoints, "deployments": deployments, "activity": activity,
+		"uptime": uptime,
 	})
 }
 

@@ -407,7 +407,24 @@ export interface ServiceEndpoint {
   last_status?: number | null
   last_latency_ms?: number | null
   last_error: string
+
+  // Observed TLS leaf certificate from the last HTTPS probe.
+  cert_not_after?: string | null
+  cert_subject?: string | null
 }
+
+export interface EndpointCheckSample {
+  up: boolean
+  checked_at: string
+}
+
+export interface EndpointUptime {
+  up_24h: number | null
+  up_7d: number | null
+  checks: EndpointCheckSample[]
+}
+
+export type ServiceUptime = Record<string, EndpointUptime>
 
 export interface ServiceDeployment {
   id: string
@@ -426,6 +443,7 @@ export interface ServiceDetail {
   endpoints: ServiceEndpoint[]
   deployments: ServiceDeployment[]
   activity: AuditEvent[]
+  uptime?: ServiceUptime
 }
 
 export interface DashboardStatsV2 extends DashboardStats {
@@ -437,6 +455,7 @@ export interface DashboardStatsV2 extends DashboardStats {
     warranty_expiring: number
     services_without_host: number
     services_down: number
+    certs_expiring: number
   }
 }
 

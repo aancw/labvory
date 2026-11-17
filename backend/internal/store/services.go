@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -42,6 +43,30 @@ type ServiceEndpoint struct {
 	LastStatus    *int       `json:"last_status,omitempty"`
 	LastLatencyMS *int       `json:"last_latency_ms,omitempty"`
 	LastError     string     `json:"last_error"`
+
+	// Observed TLS leaf certificate from the last HTTPS probe. Empty until a
+	// TLS-protected probe succeeded.
+	CertNotAfter *time.Time `json:"cert_not_after,omitempty"`
+	CertSubject  string     `json:"cert_subject"`
+}
+
+// CertObservation is the leaf certificate observed on one probe.
+type CertObservation struct {
+	NotAfter time.Time
+	Subject  string
+}
+
+// EndpointCheckSample is one recorded probe outcome, oldest first.
+type EndpointCheckSample struct {
+	Up        bool      `json:"up"`
+	CheckedAt time.Time `json:"checked_at"`
+}
+
+// EndpointUptime aggregates observed probe outcomes for one endpoint.
+type EndpointUptime struct {
+	Up24h  *float64              `json:"up_24h"`
+	Up7d   *float64              `json:"up_7d"`
+	Checks []EndpointCheckSample `json:"checks"`
 }
 
 type ServiceDeployment struct {
@@ -157,7 +182,8 @@ func (s *Services) Delete(ctx context.Context, id string) error {
 func (s *Services) ListEndpoints(ctx context.Context, serviceID string) ([]ServiceEndpoint, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, service_id, label, protocol, port, url, is_external,
-		       health_enabled, last_checked_at, last_status, last_latency_ms, COALESCE(last_error, '')
+		       health_enabled, last_checked_at, last_status, last_latency_ms, COALESCE(last_error, ''),
+		       cert_not_after, cert_subject
 		FROM service_endpoints WHERE service_id=$1 ORDER BY is_external, protocol, port`, serviceID)
 	if err != nil {
 		return nil, err
@@ -166,8 +192,7 @@ func (s *Services) ListEndpoints(ctx context.Context, serviceID string) ([]Servi
 	out := []ServiceEndpoint{}
 	for rows.Next() {
 		var e ServiceEndpoint
-		if err := rows.Scan(&e.ID, &e.ServiceID, &e.Label, &e.Protocol, &e.Port, &e.URL, &e.IsExternal,
-			&e.HealthEnabled, &e.LastCheckedAt, &e.LastStatus, &e.LastLatencyMS, &e.LastError); err != nil {
+		if err := scanEndpoint(rows, &e); err != nil {
 			return nil, err
 		}
 		out = append(out, e)
@@ -175,15 +200,26 @@ func (s *Services) ListEndpoints(ctx context.Context, serviceID string) ([]Servi
 	return out, rows.Err()
 }
 
+// rowScanner matches both pgx.Row and pgx.Rows so endpoint scanning can be
+// shared between single-row and multi-row queries.
+type rowScanner interface{ Scan(dest ...any) error }
+
+// scanEndpoint scans the full observed endpoint column set (declared fields,
+// health state, TLS certificate observation).
+func scanEndpoint(r rowScanner, e *ServiceEndpoint) error {
+	return r.Scan(&e.ID, &e.ServiceID, &e.Label, &e.Protocol, &e.Port, &e.URL, &e.IsExternal,
+		&e.HealthEnabled, &e.LastCheckedAt, &e.LastStatus, &e.LastLatencyMS, &e.LastError,
+		&e.CertNotAfter, &e.CertSubject)
+}
+
 // Endpoint returns one endpoint by id.
 func (s *Services) Endpoint(ctx context.Context, id string) (ServiceEndpoint, error) {
 	var e ServiceEndpoint
-	err := s.pool.QueryRow(ctx, `
+	err := scanEndpoint(s.pool.QueryRow(ctx, `
 		SELECT id, service_id, label, protocol, port, url, is_external,
-		       health_enabled, last_checked_at, last_status, last_latency_ms, COALESCE(last_error, '')
-		FROM service_endpoints WHERE id=$1`, id,
-	).Scan(&e.ID, &e.ServiceID, &e.Label, &e.Protocol, &e.Port, &e.URL, &e.IsExternal,
-		&e.HealthEnabled, &e.LastCheckedAt, &e.LastStatus, &e.LastLatencyMS, &e.LastError)
+		       health_enabled, last_checked_at, last_status, last_latency_ms, COALESCE(last_error, ''),
+		       cert_not_after, cert_subject
+		FROM service_endpoints WHERE id=$1`, id), &e)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ServiceEndpoint{}, ErrNotFound
 	}
@@ -203,6 +239,7 @@ func (s *Services) DueHealthEndpoints(ctx context.Context, olderThan time.Durati
 	rows, err := s.pool.Query(ctx, `
 		SELECT e.id, e.service_id, e.label, e.protocol, e.port, e.url, e.is_external,
 		       e.health_enabled, e.last_checked_at, e.last_status, e.last_latency_ms, COALESCE(e.last_error, ''),
+		       e.cert_not_after, e.cert_subject,
 		       sv.name
 		FROM service_endpoints e
 		JOIN services sv ON sv.id = e.service_id
@@ -218,6 +255,7 @@ func (s *Services) DueHealthEndpoints(ctx context.Context, olderThan time.Durati
 		var e HealthEndpoint
 		if err := rows.Scan(&e.ID, &e.ServiceID, &e.Label, &e.Protocol, &e.Port, &e.URL, &e.IsExternal,
 			&e.HealthEnabled, &e.LastCheckedAt, &e.LastStatus, &e.LastLatencyMS, &e.LastError,
+			&e.CertNotAfter, &e.CertSubject,
 			&e.ServiceName); err != nil {
 			return nil, err
 		}
@@ -226,13 +264,141 @@ func (s *Services) DueHealthEndpoints(ctx context.Context, olderThan time.Durati
 	return out, rows.Err()
 }
 
-// RecordHealthCheck stores the observed probe result for an endpoint.
-func (s *Services) RecordHealthCheck(ctx context.Context, endpointID string, statusCode, latencyMS int, errText string) error {
+// RecordHealthCheck stores the observed probe result for an endpoint. A
+// non-nil cert observation replaces the stored TLS certificate; a nil one
+// (probe failed before TLS completed, or plain HTTP) leaves the previous
+// observation untouched — an expired cert is still worth reporting while the
+// endpoint is down.
+func (s *Services) RecordHealthCheck(ctx context.Context, endpointID string, statusCode, latencyMS int, errText string, cert *CertObservation) error {
+	var notAfter any
+	var subject any
+	if cert != nil {
+		notAfter, subject = cert.NotAfter, cert.Subject
+	}
 	_, err := s.pool.Exec(ctx, `
 		UPDATE service_endpoints
-		SET last_checked_at=now(), last_status=$2, last_latency_ms=$3, last_error=$4
-		WHERE id=$1`, endpointID, statusCode, latencyMS, errText)
+		SET last_checked_at=now(), last_status=$2, last_latency_ms=$3, last_error=$4,
+		    cert_not_after=COALESCE($5, cert_not_after), cert_subject=COALESCE($6, cert_subject)
+		WHERE id=$1`, endpointID, statusCode, latencyMS, errText, notAfter, subject)
 	return err
+}
+
+// RecordEndpointCheck appends one probe outcome to the rolling history used
+// for uptime reporting. A transport failure is recorded with status 0.
+func (s *Services) RecordEndpointCheck(ctx context.Context, endpointID string, up bool, statusCode, latencyMS int, errText string) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO service_endpoint_checks (endpoint_id, up, status, latency_ms, error)
+		VALUES ($1, $2, $3, $4, $5)`,
+		endpointID, up, statusCode, latencyMS, errText)
+	return err
+}
+
+// ServiceUptime aggregates probe history for every endpoint of a service:
+// uptime percentages over 24h and 7d (nil when nothing was probed yet) plus
+// the most recent 32 samples per endpoint, oldest first, for sparklines.
+func (s *Services) ServiceUptime(ctx context.Context, serviceID string) (map[string]EndpointUptime, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT e.id,
+		       count(c.id) FILTER (WHERE c.checked_at >= now() - interval '24 hours'),
+		       count(c.id) FILTER (WHERE c.checked_at >= now() - interval '24 hours' AND c.up),
+		       count(c.id) FILTER (WHERE c.checked_at >= now() - interval '7 days'),
+		       count(c.id) FILTER (WHERE c.checked_at >= now() - interval '7 days' AND c.up)
+		FROM service_endpoints e
+		LEFT JOIN service_endpoint_checks c ON c.endpoint_id = e.id
+		WHERE e.service_id = $1
+		GROUP BY e.id`, serviceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]EndpointUptime{}
+	for rows.Next() {
+		var id string
+		var total24, up24, total7, up7 int
+		if err := rows.Scan(&id, &total24, &up24, &total7, &up7); err != nil {
+			return nil, err
+		}
+		out[id] = EndpointUptime{
+			Up24h:  uptimePct(up24, total24),
+			Up7d:   uptimePct(up7, total7),
+			Checks: []EndpointCheckSample{},
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	samples, err := s.recentEndpointChecks(ctx, serviceID)
+	if err != nil {
+		return nil, err
+	}
+	for id, list := range samples {
+		if u, ok := out[id]; ok {
+			u.Checks = list
+			out[id] = u
+		}
+	}
+	return out, nil
+}
+
+// uptimePct returns the share of successful probes as 0-100, or nil when
+// nothing was probed in the window.
+func uptimePct(up, total int) *float64 {
+	if total == 0 {
+		return nil
+	}
+	pct := math.Round(float64(up)/float64(total)*1000) / 10
+	return &pct
+}
+
+// recentEndpointChecks fetches the latest 32 samples per endpoint of one
+// service, returned oldest-first for left-to-right sparklines.
+func (s *Services) recentEndpointChecks(ctx context.Context, serviceID string) (map[string][]EndpointCheckSample, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT endpoint_id, up, checked_at FROM (
+			SELECT c.endpoint_id, c.up, c.checked_at,
+			       row_number() OVER (PARTITION BY c.endpoint_id ORDER BY c.checked_at DESC) AS rn
+			FROM service_endpoint_checks c
+			JOIN service_endpoints e ON e.id = c.endpoint_id
+			WHERE e.service_id = $1
+		) ranked
+		WHERE rn <= 32
+		ORDER BY endpoint_id, checked_at`, serviceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string][]EndpointCheckSample{}
+	for rows.Next() {
+		var id string
+		var sample EndpointCheckSample
+		if err := rows.Scan(&id, &sample.Up, &sample.CheckedAt); err != nil {
+			return nil, err
+		}
+		out[id] = append(out[id], sample)
+	}
+	return out, rows.Err()
+}
+
+// PruneEndpointChecks deletes probe history older than the retention window.
+func (s *Services) PruneEndpointChecks(ctx context.Context, olderThan time.Duration) (int64, error) {
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM service_endpoint_checks WHERE checked_at < now() - make_interval(secs => $1)`,
+		int(olderThan.Seconds()))
+	return tag.RowsAffected(), err
+}
+
+// CountCertsExpiring returns endpoints whose last observed TLS certificate
+// expires within the given number of days (or already has).
+func (s *Services) CountCertsExpiring(ctx context.Context, withinDays int) (int, error) {
+	var n int
+	err := s.pool.QueryRow(ctx, `
+		SELECT count(*) FROM service_endpoints
+		WHERE cert_not_after IS NOT NULL AND cert_not_after <= now() + make_interval(days => $1)`,
+		withinDays).Scan(&n)
+	return n, err
 }
 
 // CountEndpointsDown returns enabled endpoints whose last check failed
