@@ -112,31 +112,7 @@ export function DashboardPage() {
             />
           </div>
 
-          {/* Device status strip */}
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle className="text-sm">Assets by status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {data.assets.total === 0 ? (
-                <EmptyState
-                  icon={BoxesIcon}
-                  title="No infrastructure registered yet"
-                  description="Register your first asset from All Assets or the Quick add menu — this dashboard reflects live database state."
-                />
-              ) : (
-                <div className="flex flex-wrap gap-x-8 gap-y-3">
-                  <StatusCount status="online" count={data.assets.online} />
-                  <StatusCount status="offline" count={data.assets.offline} />
-                  <StatusCount status="maintenance" count={data.assets.maintenance} />
-                  <StatusCount status="retired" count={data.assets.retired} />
-                  <StatusCount status="unknown" count={data.assets.unknown} />
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Alerts */}
+          {/* Device status strip + alerts — share one row on large screens */}
           {(() => {
             const stats = data as DashboardStatsV2
             const alertItems = [
@@ -145,25 +121,51 @@ export function DashboardPage() {
               { label: "Warranty expiring (60d)", count: stats.alerts?.warranty_expiring ?? 0, to: "/assets" },
               { label: "Services without host", count: stats.alerts?.services_without_host ?? 0, to: "/services" },
             ]
-            const total = alertItems.reduce((acc, a) => acc + a.count, 0)
-            if (total === 0) return null
+            const hasAlerts = alertItems.some((a) => a.count > 0)
             return (
-              <Card className="mt-6 border-amber-500/30">
-                <CardHeader className="flex-row items-center justify-between">
-                  <CardTitle className="text-sm">Attention needed</CardTitle>
-                  <ShieldAlertIcon className="size-4 text-amber-500" aria-hidden />
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {alertItems.filter((a) => a.count > 0).map((a) => (
-                      <Link key={a.label} to={a.to}
-                        className="inline-flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-500/20 dark:text-amber-400">
-                        <span className="font-semibold tabular-nums">{a.count}</span> {a.label}
-                      </Link>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+              <div className={cn("mt-6 grid gap-4", hasAlerts && "lg:grid-cols-2")}>
+                <Card className="gap-3 py-4">
+                  <CardHeader>
+                    <CardTitle className="text-sm">Assets by status</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {data.assets.total === 0 ? (
+                      <EmptyState
+                        icon={BoxesIcon}
+                        title="No infrastructure registered yet"
+                        description="Register your first asset from All Assets or the Quick add menu — this dashboard reflects live database state."
+                      />
+                    ) : (
+                      <div className="flex flex-wrap gap-x-6 gap-y-3">
+                        <StatusCount status="online" count={data.assets.online} />
+                        <StatusCount status="offline" count={data.assets.offline} />
+                        <StatusCount status="maintenance" count={data.assets.maintenance} />
+                        <StatusCount status="retired" count={data.assets.retired} />
+                        <StatusCount status="unknown" count={data.assets.unknown} />
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {hasAlerts && (
+                  <Card className="gap-3 border-amber-500/30 py-4">
+                    <CardHeader className="flex-row items-center justify-between">
+                      <CardTitle className="text-sm">Attention needed</CardTitle>
+                      <ShieldAlertIcon className="size-4 text-amber-500" aria-hidden />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2">
+                        {alertItems.filter((a) => a.count > 0).map((a) => (
+                          <Link key={a.label} to={a.to}
+                            className="inline-flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-500/20 dark:text-amber-400">
+                            <span className="font-semibold tabular-nums">{a.count}</span> {a.label}
+                          </Link>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
             )
           })()}
 
