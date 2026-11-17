@@ -157,7 +157,7 @@ func (s *Services) Delete(ctx context.Context, id string) error {
 func (s *Services) ListEndpoints(ctx context.Context, serviceID string) ([]ServiceEndpoint, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, service_id, label, protocol, port, url, is_external,
-		       health_enabled, last_checked_at, last_status, last_latency_ms, last_error
+		       health_enabled, last_checked_at, last_status, last_latency_ms, COALESCE(last_error, '')
 		FROM service_endpoints WHERE service_id=$1 ORDER BY is_external, protocol, port`, serviceID)
 	if err != nil {
 		return nil, err
@@ -180,7 +180,7 @@ func (s *Services) Endpoint(ctx context.Context, id string) (ServiceEndpoint, er
 	var e ServiceEndpoint
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, service_id, label, protocol, port, url, is_external,
-		       health_enabled, last_checked_at, last_status, last_latency_ms, last_error
+		       health_enabled, last_checked_at, last_status, last_latency_ms, COALESCE(last_error, '')
 		FROM service_endpoints WHERE id=$1`, id,
 	).Scan(&e.ID, &e.ServiceID, &e.Label, &e.Protocol, &e.Port, &e.URL, &e.IsExternal,
 		&e.HealthEnabled, &e.LastCheckedAt, &e.LastStatus, &e.LastLatencyMS, &e.LastError)
@@ -202,7 +202,7 @@ type HealthEndpoint struct {
 func (s *Services) DueHealthEndpoints(ctx context.Context, olderThan time.Duration) ([]HealthEndpoint, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT e.id, e.service_id, e.label, e.protocol, e.port, e.url, e.is_external,
-		       e.health_enabled, e.last_checked_at, e.last_status, e.last_latency_ms, e.last_error,
+		       e.health_enabled, e.last_checked_at, e.last_status, e.last_latency_ms, COALESCE(e.last_error, ''),
 		       sv.name
 		FROM service_endpoints e
 		JOIN services sv ON sv.id = e.service_id
