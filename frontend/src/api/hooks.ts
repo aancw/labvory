@@ -52,7 +52,8 @@ import type {
 export function useMe() {
   return useQuery({
     queryKey: ["auth", "me"],
-    queryFn: () => api.get<{ user: User }>("/api/v1/auth/me"),
+    queryFn: () =>
+      api.get<{ user: User; require_2fa?: boolean }>("/api/v1/auth/me"),
     retry: false,
     staleTime: Number.POSITIVE_INFINITY,
   })
@@ -88,7 +89,7 @@ export function useTOTPEnable() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (code: string) => api.post<{ ok: boolean }>("/api/v1/auth/2fa/enable", { code }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["me"] }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["auth", "me"] }),
   })
 }
 
@@ -97,7 +98,7 @@ export function useTOTPDisable() {
   return useMutation({
     mutationFn: (input: { password: string; code: string }) =>
       api.post<{ ok: boolean }>("/api/v1/auth/2fa/disable", input),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["me"] }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["auth", "me"] }),
   })
 }
 
@@ -726,7 +727,7 @@ export function useUpdateUser() {
       api.put<{ ok: boolean }>(`/api/v1/users/${input.id}`, input.payload),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["users"] })
-      void qc.invalidateQueries({ queryKey: ["me"] })
+      void qc.invalidateQueries({ queryKey: ["auth", "me"] })
     },
   })
 }
@@ -832,6 +833,21 @@ export function useToggleEndpointHealth() {
       api.put<{ ok: boolean; health_enabled: boolean }>(`/api/v1/service-endpoints/${input.id}/health`, {
         enabled: input.enabled,
       }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["service"] })
+      void qc.invalidateQueries({ queryKey: ["stats"] })
+    },
+  })
+}
+
+export function useSetEndpointMaintenance() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { id: string; until: string | null }) =>
+      api.post<{ ok: boolean; maintenance_until: string | null }>(
+        `/api/v1/service-endpoints/${input.id}/maintenance`,
+        { until: input.until },
+      ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["service"] })
       void qc.invalidateQueries({ queryKey: ["stats"] })

@@ -19,6 +19,38 @@ var settingsSchema = map[string]func(v json.RawMessage) (json.RawMessage, string
 	"theme.default":             validateStringSetting(0, 16),
 	"notifications.webhook_url": validateWebhookURL,
 	"audit.retention_days":      validateIntSetting(0, 3650),
+	"backup.enabled":            validateBoolSetting,
+	"backup.dir":                validateBackupDir,
+	"backup.interval_hours":     validateIntSetting(1, 8760),
+	"backup.retention":          validateIntSetting(1, 3650),
+	"security.require_2fa":      validateBoolSetting,
+}
+
+// validateBoolSetting accepts a JSON boolean.
+func validateBoolSetting(v json.RawMessage) (json.RawMessage, string) {
+	var b bool
+	if err := json.Unmarshal(v, &b); err != nil {
+		return nil, "must be a boolean"
+	}
+	return json.RawMessage(mustMarshal(b)), ""
+}
+
+// validateBackupDir accepts a relative or absolute directory path of at most
+// 300 characters. A single path component is enough (the scheduler creates
+// the tree); NUL bytes are rejected because they break os.MkdirAll.
+func validateBackupDir(v json.RawMessage) (json.RawMessage, string) {
+	var s string
+	if err := json.Unmarshal(v, &s); err != nil {
+		return nil, "must be a string"
+	}
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return json.RawMessage(`"./backups"`), ""
+	}
+	if len(s) > 300 || strings.ContainsRune(s, 0) {
+		return nil, "invalid directory path"
+	}
+	return json.RawMessage(mustMarshal(s)), ""
 }
 
 // validateIntSetting accepts an integer inside [min, max].

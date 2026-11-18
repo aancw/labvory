@@ -6,11 +6,13 @@ import {
   ArrowLeftIcon,
   ExternalLinkIcon,
   GlobeIcon,
+  MoreVerticalIcon,
   PencilIcon,
   PlusIcon,
   ScrollTextIcon,
   ShieldCheckIcon,
   Trash2Icon,
+  WrenchIcon,
 } from "lucide-react"
 
 import { isApiError } from "@/api/client"
@@ -22,14 +24,23 @@ import {
   useDeleteServiceDeployment,
   useDeleteServiceEndpoint,
   useService,
+  useSetEndpointMaintenance,
   useUpdateService,
 } from "@/api/hooks"
 import type { EndpointUptime, ServiceEndpoint, ServiceUptime } from "@/api/types"
-import { cn, formatRelative } from "@/lib/utils"
+import { cn, formatDateTime, formatRelative } from "@/lib/utils"
 
 import { AssetPicker } from "@/components/AssetPicker"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { EmptyState } from "@/components/EmptyState"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { StatusBadge } from "@/components/StatusBadge"
 import { Spinner } from "@/components/Spinner"
 import { Button } from "@/components/ui/button"
@@ -39,7 +50,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { formatDateTime } from "@/lib/utils"
 import { ServiceFormFields, servicePayload, type ServiceFormState } from "./ServicesPage"
 
 export function ServiceDetailPage() {
@@ -273,6 +283,7 @@ function EndpointsCard({
   const create = useCreateServiceEndpoint()
   const remove = useDeleteServiceEndpoint()
   const toggleHealth = useToggleEndpointHealth()
+  const setMaintenance = useSetEndpointMaintenance()
   const [open, setOpen] = useState(false)
   const [label, setLabel] = useState("")
   const [protocol, setProtocol] = useState("http")
@@ -299,6 +310,24 @@ function EndpointsCard({
     )
   }
 
+  const snooze = (endpoint: ServiceEndpoint, hours: number | null) => {
+    const until = hours === null
+      ? null
+      : new Date(Date.now() + hours * 3_600_000).toISOString()
+    setMaintenance.mutate(
+      { id: endpoint.id, until },
+      {
+        onSuccess: () =>
+          toast.success(
+            until === null
+              ? "Maintenance window cleared — alerts resume."
+              : `Maintenance until ${formatDateTime(until)} — downtime alerts are muted.`,
+          ),
+        onError: (err) => toast.error(isApiError(err) ? err.message : "Could not set maintenance window."),
+      },
+    )
+  }
+
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between">
@@ -314,7 +343,9 @@ function EndpointsCard({
           </p>
         ) : (
           <ul className="space-y-2">
-            {endpoints.map((e) => (
+            {endpoints.map((e) => {
+              const inMaintenance = e.maintenance_until != null && new Date(e.maintenance_until) > new Date()
+              return (
               <li key={e.id} className="flex items-center gap-3 rounded-md border px-3 py-2">
                 <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs uppercase">{e.protocol}</span>
                 {e.url ? (
@@ -327,6 +358,14 @@ function EndpointsCard({
                     {e.label || "—"}{e.port != null ? ` :${e.port}` : ""}
                   </span>
                 )}
+                {inMaintenance ? (
+                  <span
+                    title={`Planned maintenance until ${formatDateTime(e.maintenance_until!)} — downtime alerts are muted.`}
+                    className="inline-flex shrink-0 items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-600 dark:text-amber-400"
+                  >
+                    <WrenchIcon className="size-3" aria-hidden />maintenance
+                  </span>
+                ) : null}
                 <CertChip endpoint={e} />
                 {e.health_enabled ? <UptimeSpark up={uptime[e.id]} /> : null}
                 {e.is_external ? <span className="text-xs text-muted-foreground">external</span> : null}
@@ -367,6 +406,43 @@ function EndpointsCard({
                     <ActivityIcon className="size-3.5" aria-hidden />
                   </Button>
                 ) : null}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7"
+                      title="Maintenance window"
+                      aria-label={`Maintenance options for ${e.label || e.url}`}
+                    >
+                      <MoreVerticalIcon className="size-3.5" aria-hidden />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Planned maintenance</DropdownMenuLabel>
+                    <DropdownMenuItem disabled={setMaintenance.isPending}
+                      onClick={() => snooze(e, 1)}>
+                      Mute alerts for 1 hour
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled={setMaintenance.isPending}
+                      onClick={() => snooze(e, 4)}>
+                      Mute alerts for 4 hours
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled={setMaintenance.isPending}
+                      onClick={() => snooze(e, 24)}>
+                      Mute alerts for 24 hours
+                    </DropdownMenuItem>
+                    {inMaintenance ? (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem disabled={setMaintenance.isPending}
+                          onClick={() => snooze(e, null)}>
+                          End maintenance now
+                        </DropdownMenuItem>
+                      </>
+                    ) : null}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <ConfirmDialog
                   trigger={
                     <Button variant="ghost" size="icon" className="size-7" aria-label="Remove endpoint">
@@ -383,7 +459,8 @@ function EndpointsCard({
                   }
                 />
               </li>
-            ))}
+              )
+            })}
           </ul>
         )}
 

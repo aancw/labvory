@@ -11,6 +11,10 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -37,6 +41,22 @@ const (
 	auditPruneEvery = 24 * time.Hour
 )
 
+// backupSettings mirrors the backup.* app settings, with defaults applied.
+type backupSettings struct {
+	enabled       bool
+	dir           string
+	intervalHours int
+	retention     int
+}
+
+// schedSettings is the per-tick snapshot of the instance settings the
+// scheduler acts on.
+type schedSettings struct {
+	webhookURL    string
+	retentionDays int
+	backup        backupSettings
+}
+
 // Scheduler is the single background worker.
 type Scheduler struct {
 	pool         *pgxpool.Pool
@@ -44,11 +64,13 @@ type Scheduler struct {
 	services     *store.Services
 	settings     *store.Settings
 	audit        *store.AuditEvents
+	importer     *store.Importer
 	runner       *integrations.Runner
 	logger       *slog.Logger
 
 	lastChecksPrune time.Time
 	lastAuditPrune  time.Time
+	lastBackupAt    time.Time
 }
 
 func New(pool *pgxpool.Pool, runner *integrations.Runner, logger *slog.Logger) *Scheduler {
@@ -58,6 +80,7 @@ func New(pool *pgxpool.Pool, runner *integrations.Runner, logger *slog.Logger) *
 		services:     store.NewServices(pool),
 		settings:     store.NewSettings(pool),
 		audit:        store.NewAuditEvents(pool),
+		importer:     store.NewImporter(pool),
 		runner:       runner,
 		logger:       logger,
 	}
@@ -79,27 +102,56 @@ func (s *Scheduler) Run(ctx context.Context) {
 }
 
 func (s *Scheduler) tick(ctx context.Context) {
-	hook, retentionDays := s.loadSettings(ctx)
-	s.syncDueIntegrations(ctx, hook)
-	s.checkDueEndpoints(ctx, hook)
-	s.pruneHistory(ctx, retentionDays)
+	cfg := s.loadSettings(ctx)
+	s.syncDueIntegrations(ctx, cfg.webhookURL)
+	s.checkDueEndpoints(ctx, cfg.webhookURL)
+	s.pruneHistory(ctx, cfg.retentionDays)
+	s.runDueBackups(ctx, cfg)
 }
 
-// loadSettings reads the notification webhook and audit retention once per
-// tick. Empty webhook = notifications disabled; retention 0 = keep forever.
-func (s *Scheduler) loadSettings(ctx context.Context) (webhookURL string, retentionDays int) {
+// loadSettings reads the settings the scheduler acts on once per tick.
+// Empty webhook = notifications disabled; retention 0 = keep forever.
+func (s *Scheduler) loadSettings(ctx context.Context) schedSettings {
+	var cfg schedSettings
 	all, err := s.settings.All(ctx)
 	if err != nil {
 		s.logger.Error("scheduler: load settings failed", "error", err)
-		return "", 0
+		return cfg
 	}
 	if raw := all["notifications.webhook_url"]; len(raw) > 0 {
-		_ = json.Unmarshal(raw, &webhookURL)
+		_ = json.Unmarshal(raw, &cfg.webhookURL)
 	}
 	if raw := all["audit.retention_days"]; len(raw) > 0 {
-		_ = json.Unmarshal(raw, &retentionDays)
+		_ = json.Unmarshal(raw, &cfg.retentionDays)
 	}
-	return webhookURL, retentionDays
+	cfg.backup = backupSettings{
+		enabled:       false,
+		dir:           "./backups",
+		intervalHours: 24,
+		retention:     14,
+	}
+	if raw := all["backup.enabled"]; len(raw) > 0 {
+		_ = json.Unmarshal(raw, &cfg.backup.enabled)
+	}
+	if raw := all["backup.dir"]; len(raw) > 0 {
+		var dir string
+		if json.Unmarshal(raw, &dir) == nil && strings.TrimSpace(dir) != "" {
+			cfg.backup.dir = dir
+		}
+	}
+	if raw := all["backup.interval_hours"]; len(raw) > 0 {
+		var n int
+		if json.Unmarshal(raw, &n) == nil && n >= 1 {
+			cfg.backup.intervalHours = n
+		}
+	}
+	if raw := all["backup.retention"]; len(raw) > 0 {
+		var n int
+		if json.Unmarshal(raw, &n) == nil && n >= 1 {
+			cfg.backup.retention = n
+		}
+	}
+	return cfg
 }
 
 // notify delivers one webhook message; delivery problems are logged and
@@ -152,7 +204,11 @@ func (s *Scheduler) checkDueEndpoints(ctx context.Context, hook string) {
 				title, message = ep.ServiceName+" recovered", fmt.Sprintf("%s is answering again (HTTP %d, %d ms).", ep.URL, status, latency)
 			}
 			s.recordAudit(book, "service_endpoint", ep.ID, ep.ServiceName+" · "+ep.Label, action, detail)
-			s.notify(book, hook, title, message)
+			// Inside a declared maintenance window the flapping is expected:
+			// the transition stays in the Activity log but no push is sent.
+			if !ep.InMaintenance(time.Now()) {
+				s.notify(book, hook, title, message)
+			}
 		}
 		s.checkCertExpiry(book, hook, ep, cert)
 	}
@@ -328,4 +384,102 @@ func (s *Scheduler) recordAudit(ctx context.Context, entityType, entityID, entit
 	if err != nil {
 		s.logger.Error("scheduler: audit write failed", "error", err, "action", action)
 	}
+}
+
+// ---------- scheduled inventory backups ----------
+
+// backupFilePrefix is the filename pattern of the JSON snapshots the backup
+// job writes; pruning sorts by name, so the embedded timestamp is the order.
+const backupFilePrefix = "lanvory-inventory-"
+
+// runDueBackups writes a full inventory JSON snapshot when the configured
+// interval has elapsed. Each run — success or failure — is audited, and a
+// failed run notifies the webhook because silent backup rot is worse than a
+// noisy alert. The interval is tracked in memory: a restart simply takes one
+// extra snapshot, which retention prunes.
+func (s *Scheduler) runDueBackups(ctx context.Context, cfg schedSettings) {
+	if !cfg.backup.enabled {
+		return
+	}
+	interval := time.Duration(cfg.backup.intervalHours) * time.Hour
+	now := time.Now()
+	if !s.lastBackupAt.IsZero() && now.Sub(s.lastBackupAt) < interval {
+		return
+	}
+	s.lastBackupAt = now
+
+	// The snapshot must survive a shutdown mid-write, hence temp-file rename.
+	book := context.WithoutCancel(ctx)
+	name, err := s.writeBackupSnapshot(book, now, cfg.backup)
+	if err != nil {
+		s.logger.Error("scheduler: inventory backup failed", "error", err)
+		s.recordAudit(book, "settings", "", "inventory backup", "backup_failed",
+			map[string]any{"error": err.Error(), "dir": cfg.backup.dir})
+		s.notify(book, cfg.webhookURL, "Lanvory inventory backup failed", err.Error())
+		return
+	}
+	s.recordAudit(book, "settings", "", "inventory backup", "backup_completed",
+		map[string]any{"file": name, "dir": cfg.backup.dir, "retention": cfg.backup.retention})
+}
+
+// writeBackupSnapshot exports the inventory (same document the UI download
+// produces, so files restore losslessly), writes it atomically into dir, and
+// prunes the oldest snapshots beyond the retention count.
+func (s *Scheduler) writeBackupSnapshot(ctx context.Context, now time.Time, b backupSettings) (string, error) {
+	if err := os.MkdirAll(b.dir, 0o700); err != nil {
+		return "", fmt.Errorf("create backup dir: %w", err)
+	}
+	doc, err := s.importer.ExportInventory(ctx)
+	if err != nil {
+		return "", fmt.Errorf("export inventory: %w", err)
+	}
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("encode inventory: %w", err)
+	}
+
+	name := backupFilePrefix + now.Format("20060102-150405") + ".json"
+	tmp := filepath.Join(b.dir, name+".tmp")
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return "", fmt.Errorf("write snapshot: %w", err)
+	}
+	final := filepath.Join(b.dir, name)
+	if err := os.Rename(tmp, final); err != nil {
+		_ = os.Remove(tmp)
+		return "", fmt.Errorf("move snapshot into place: %w", err)
+	}
+
+	if err := pruneBackupSnapshots(b.dir, b.retention); err != nil {
+		// A failed prune must not fail the backup that just succeeded.
+		s.logger.Warn("scheduler: backup prune failed", "error", err)
+	}
+	return name, nil
+}
+
+// pruneBackupSnapshots deletes the oldest snapshot files so at most retention
+// remain. Names sort chronologically because of the embedded timestamp.
+func pruneBackupSnapshots(dir string, retention int) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	var snapshots []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if name := e.Name(); strings.HasPrefix(name, backupFilePrefix) && strings.HasSuffix(name, ".json") {
+			snapshots = append(snapshots, name)
+		}
+	}
+	if len(snapshots) <= retention {
+		return nil
+	}
+	sort.Strings(snapshots)
+	for _, name := range snapshots[:len(snapshots)-retention] {
+		if err := os.Remove(filepath.Join(dir, name)); err != nil {
+			return err
+		}
+	}
+	return nil
 }

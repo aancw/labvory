@@ -435,6 +435,10 @@ export interface ServiceEndpoint {
   // Observed TLS leaf certificate from the last HTTPS probe.
   cert_not_after?: string | null
   cert_subject?: string | null
+
+  // Operator-declared planned maintenance; while in the future, downtime
+  // notifications are suppressed and the dashboard down-alert skips it.
+  maintenance_until?: string | null
 }
 
 export interface EndpointCheckSample {

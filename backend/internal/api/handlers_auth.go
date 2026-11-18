@@ -82,6 +82,10 @@ type loginRequest struct {
 
 type userResponse struct {
 	User store.User `json:"user"`
+	// Require2FA mirrors the instance-wide "security.require_2fa" setting so
+	// the client can gate the UI without another round trip. Populated only
+	// by handleMe; the login/setup responses leave it false.
+	Require2FA bool `json:"require_2fa,omitempty"`
 }
 
 // handleLogin authenticates and issues the session cookie. When the account
@@ -238,9 +242,15 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// handleMe returns the authenticated user.
+// handleMe returns the authenticated user plus the instance-wide 2FA
+// enforcement flag, so the client can show the enrollment gate in one fetch.
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
-	httpx.WriteJSON(w, http.StatusOK, userResponse{User: currentUser(r)})
+	user := currentUser(r)
+	required, err := s.settings.GetBool(r.Context(), "security.require_2fa")
+	if err != nil {
+		s.logger.Error("load require_2fa setting failed", "error", err)
+	}
+	httpx.WriteJSON(w, http.StatusOK, userResponse{User: user, Require2FA: required})
 }
 
 type changePasswordRequest struct {

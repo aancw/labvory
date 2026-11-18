@@ -156,10 +156,13 @@ func (s *Server) Routes() http.Handler {
 
 		// Authenticated application APIs. Role enforcement (viewer read-only,
 		// operator without accounts/settings/tokens) runs after auth resolves
-		// the caller; MCP dispatch is admin-equivalent by design.
+		// the caller; MCP dispatch is admin-equivalent by design. Optional
+		// instance-wide 2FA enforcement walls the same surface for callers
+		// without an active TOTP enrollment.
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireAuth)
 			r.Use(s.enforceRoles)
+			r.Use(s.requireTwoFactor)
 			s.mountDataRoutes(r)
 		})
 
@@ -167,6 +170,7 @@ func (s *Server) Routes() http.Handler {
 		r.Route("/users", func(r chi.Router) {
 			r.Use(s.requireAuth)
 			r.Use(s.requireAdmin)
+			r.Use(s.requireTwoFactor)
 			r.Get("/", s.handleListUsers)
 			r.Post("/", s.handleCreateUser)
 			r.Put("/{userID}", s.handleUpdateUser)
@@ -179,6 +183,7 @@ func (s *Server) Routes() http.Handler {
 		r.Route("/tokens", func(r chi.Router) {
 			r.Use(s.requireAuth)
 			r.Use(s.requireAdmin)
+			r.Use(s.requireTwoFactor)
 			r.Get("/", s.handleListTokens)
 			r.Post("/", s.handleCreateToken)
 			r.Delete("/{tokenID}", s.handleRevokeToken)
@@ -304,6 +309,7 @@ func (s *Server) mountDataRoutes(r chi.Router) {
 	})
 	r.Delete("/service-endpoints/{endpointID}", s.handleDeleteServiceEndpoint)
 	r.Put("/service-endpoints/{endpointID}/health", s.handleToggleEndpointHealth)
+	r.Post("/service-endpoints/{endpointID}/maintenance", s.handleSetEndpointMaintenance)
 	r.Delete("/service-deployments/{deploymentID}", s.handleDeleteServiceDeployment)
 
 	// Topology + data portability (Phase 5).

@@ -35,6 +35,10 @@ services:
       LV_SECRET_KEY: ${LV_SECRET_KEY:-}
       # Optional demo seed: "dev" populates an EMPTY inventory only.
       LV_SEED_MODE: ${LV_SEED_MODE:-}
+    volumes:
+      # Scheduled backups (Settings → Scheduled backups) write JSON snapshots
+      # here; the named volume keeps them across container replacements.
+      - backups:/app/backups
     ports:
       # Direct API access for remote clients/scripts (authenticated + CSRF protected).
       # Set LV_API_PORT to change the port.
@@ -61,3 +65,4 @@ services:
 
 volumes:
   pgdata:
+  backups:

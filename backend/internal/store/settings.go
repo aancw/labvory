@@ -3,8 +3,10 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -37,6 +39,26 @@ func (s *Settings) All(ctx context.Context) (map[string]json.RawMessage, error) 
 		out[k] = v
 	}
 	return out, rows.Err()
+}
+
+// Get returns one setting's raw value; a missing key yields nil, not an error.
+func (s *Settings) Get(ctx context.Context, key string) (json.RawMessage, error) {
+	var v json.RawMessage
+	err := s.pool.QueryRow(ctx, `SELECT value FROM app_settings WHERE key=$1`, key).Scan(&v)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	return v, err
+}
+
+// GetBool reads a boolean setting; a missing or malformed value counts as false.
+func (s *Settings) GetBool(ctx context.Context, key string) (bool, error) {
+	raw, err := s.Get(ctx, key)
+	if err != nil || len(raw) == 0 {
+		return false, err
+	}
+	var b bool
+	return json.Unmarshal(raw, &b) == nil && b, nil
 }
 
 // Upsert writes one setting with actor attribution.

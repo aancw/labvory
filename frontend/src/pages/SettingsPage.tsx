@@ -18,15 +18,14 @@ import {
   useSettings,
   useTestNotification,
   useTOTPDisable,
-  useTOTPEnable,
-  useTOTPSetup,
   useUpdateSettings,
   useUpdateUser,
   useUsers,
 } from "@/api/hooks"
-import type { ApiToken, ApiTokenCreated, TOTPSetup, User } from "@/api/types"
+import type { ApiToken, ApiTokenCreated, User } from "@/api/types"
 import { PageHeader } from "@/components/PageHeader"
 import { useTheme } from "@/components/theme-provider"
+import { TOTPEnrollmentDialog } from "@/components/TOTPEnrollmentDialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -61,8 +60,10 @@ export function SettingsPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <InstanceCard />
         <NotificationsCard />
+        {isAdmin ? <BackupsCard /> : null}
         <RetentionCard />
         <TwoFactorCard />
+        {isAdmin ? <TwoFactorPolicyCard /> : null}
         <AppearanceCard />
         <SecurityCard />
         <SessionsCard />
@@ -325,34 +326,11 @@ function AppearanceCard() {
 function TwoFactorCard() {
   const { data: me } = useMe()
   const enabled = me?.user?.totp_enabled_at != null
-  const setup = useTOTPSetup()
-  const enable = useTOTPEnable()
   const disable = useTOTPDisable()
-  const [enroll, setEnroll] = useState<TOTPSetup | null>(null)
-  const [code, setCode] = useState("")
+  const [enrollOpen, setEnrollOpen] = useState(false)
   const [disableOpen, setDisableOpen] = useState(false)
   const [disablePassword, setDisablePassword] = useState("")
   const [disableCode, setDisableCode] = useState("")
-
-  const startEnroll = () => {
-    setCode("")
-    setup.mutate(undefined, {
-      onSuccess: (res) => setEnroll(res),
-      onError: (err) => toast.error(isApiError(err) ? err.message : "Could not start enrollment."),
-    })
-  }
-
-  const confirmEnable = () => {
-    enable.mutate(code.trim(), {
-      onSuccess: () => {
-        toast.success("Two-factor enabled — you will need a code at next sign-in.")
-        setEnroll(null)
-        setCode("")
-      },
-      onError: (err) =>
-        toast.error(isApiError(err) ? err.message : "Could not confirm the code."),
-    })
-  }
 
   const confirmDisable = () => {
     disable.mutate(
@@ -395,58 +373,14 @@ function TwoFactorCard() {
               Disable
             </Button>
           ) : (
-            <Button variant="outline" size="sm" onClick={startEnroll} disabled={setup.isPending}>
-              {setup.isPending ? "Preparing…" : "Enable"}
+            <Button variant="outline" size="sm" onClick={() => setEnrollOpen(true)}>
+              Enable
             </Button>
           )}
         </div>
 
-        {/* Enrollment dialog: secret + manual entry (no QR dependency). */}
-        <Dialog open={enroll !== null} onOpenChange={(open) => !open && setEnroll(null)}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Set up an authenticator</DialogTitle>
-              <DialogDescription>
-                Add a new TOTP entry in your authenticator app (Aegis, 1Password, Google
-                Authenticator, …) — paste the key below or use &ldquo;enter setup key&rdquo;.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3">
-              <div>
-                <p className="mb-1 text-xs font-medium text-muted-foreground">Setup key</p>
-                <p className="break-all rounded-md border bg-muted px-3 py-2 font-mono text-sm tracking-wider">
-                  {enroll?.secret}
-                </p>
-              </div>
-              <div>
-                <p className="mb-1 text-xs font-medium text-muted-foreground">otpauth URI (optional)</p>
-                <p className="break-all rounded-md border bg-muted px-3 py-2 font-mono text-xs">
-                  {enroll?.otpauth_uri}
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="totp-confirm">Confirm with a 6-digit code</Label>
-                <Input
-                  id="totp-confirm"
-                  className="text-center font-mono tracking-[0.4em]"
-                  inputMode="numeric"
-                  maxLength={6}
-                  placeholder="000000"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && confirmEnable()}
-                  autoFocus
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" size="sm" onClick={() => setEnroll(null)}>Cancel</Button>
-              <Button size="sm" onClick={confirmEnable} disabled={enable.isPending || code.trim().length !== 6}>
-                {enable.isPending ? "Verifying…" : "Confirm & enable"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* Enrollment dialog (shared with the 2FA gate): secret + manual entry, no QR dependency. */}
+        <TOTPEnrollmentDialog open={enrollOpen} onOpenChange={setEnrollOpen} />
 
         {/* Disable dialog: password + code. */}
         <Dialog open={disableOpen} onOpenChange={setDisableOpen}>
@@ -496,6 +430,177 @@ function TwoFactorCard() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      </CardContent>
+    </Card>
+  )
+}
+
+// TwoFactorPolicyCard toggles the instance-wide 2FA requirement. Users
+// without an active enrollment keep access to enrollment itself (and sign
+// out) — the server walls only the data API, so enabling can never lock an
+// operator out of their own account.
+function TwoFactorPolicyCard() {
+  const { data, isLoading } = useSettings()
+  const updateSettings = useUpdateSettings()
+  const required = data?.settings["security.require_2fa"] === true
+
+  const toggle = () => {
+    updateSettings.mutate(
+      { settings: { "security.require_2fa": !required } },
+      {
+        onSuccess: () =>
+          toast.success(!required
+            ? "Two-factor is now required — accounts without it see only the enrollment screen."
+            : "Two-factor requirement turned off."),
+        onError: (err) => toast.error(isApiError(err) ? err.message : "Could not save settings."),
+      },
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Require two-factor authentication</CardTitle>
+        <CardDescription>
+          Every account must enroll a TOTP authenticator before it can read or change
+          inventory data. Sign-in and enrollment stay available, so nobody gets locked out.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-9 w-full" />
+        ) : (
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm">
+              {required ? (
+                <span className="inline-flex items-center gap-2">
+                  <Badge>Enforced</Badge>
+                  <span className="text-muted-foreground">all accounts need a second factor</span>
+                </span>
+              ) : (
+                <span className="text-muted-foreground">Optional — per-account choice.</span>
+              )}
+            </div>
+            <Button variant="outline" size="sm" onClick={toggle} disabled={updateSettings.isPending}>
+              {updateSettings.isPending ? "Saving…" : required ? "Turn off" : "Enforce"}
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// BackupsCard configures the scheduler's periodic JSON snapshots: interval,
+// on-disk retention, and the directory snapshots are written to. Files use
+// the same shape as the manual export, so they restore losslessly.
+function BackupsCard() {
+  const { data, isLoading } = useSettings()
+  const updateSettings = useUpdateSettings()
+  const [enabled, setEnabled] = useState(false)
+  const [dir, setDir] = useState("")
+  const [intervalHours, setIntervalHours] = useState(24)
+  const [retention, setRetention] = useState(14)
+
+  useEffect(() => {
+    if (!data) return
+    const s = data.settings
+    if (typeof s["backup.enabled"] === "boolean") setEnabled(s["backup.enabled"])
+    if (typeof s["backup.dir"] === "string" && s["backup.dir"] !== "") setDir(s["backup.dir"])
+    if (typeof s["backup.interval_hours"] === "number") setIntervalHours(s["backup.interval_hours"])
+    if (typeof s["backup.retention"] === "number") setRetention(s["backup.retention"])
+  }, [data])
+
+  const save = () => {
+    updateSettings.mutate(
+      {
+        settings: {
+          "backup.enabled": enabled,
+          "backup.dir": dir.trim() || "./backups",
+          "backup.interval_hours": intervalHours,
+          "backup.retention": retention,
+        },
+      },
+      {
+        onSuccess: () => toast.success(enabled ? "Backup schedule saved — first snapshot runs within a minute." : "Backups disabled."),
+        onError: (err) => toast.error(isApiError(err) ? err.message : "Could not save settings."),
+      },
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Scheduled backups</CardTitle>
+        <CardDescription>
+          Periodically write a full inventory JSON snapshot to disk — the same document as the
+          manual export, restorable from Import &amp; export. Failed runs are audited and push a
+          webhook alert.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : (
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault()
+              save()
+            }}
+          >
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={enabled}
+                onChange={(e) => setEnabled(e.target.checked)}
+              />
+              Enable scheduled backups
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="backup-interval">Interval (hours)</Label>
+                <Input
+                  id="backup-interval"
+                  type="number"
+                  min={1}
+                  max={8760}
+                  value={intervalHours}
+                  onChange={(e) => setIntervalHours(Number(e.target.value))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="backup-retention">Keep (snapshots)</Label>
+                <Input
+                  id="backup-retention"
+                  type="number"
+                  min={1}
+                  max={3650}
+                  value={retention}
+                  onChange={(e) => setRetention(Number(e.target.value))}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="backup-dir">Directory</Label>
+              <Input
+                id="backup-dir"
+                className="font-mono text-xs"
+                placeholder="./backups"
+                maxLength={300}
+                value={dir}
+                onChange={(e) => setDir(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Relative to the server process. In Docker, mount a volume here (compose already
+                mounts <span className="font-mono">/app/backups</span>) or snapshots die with the container.
+              </p>
+            </div>
+            <Button type="submit" size="sm" disabled={updateSettings.isPending}>
+              {updateSettings.isPending ? "Saving…" : "Save changes"}
+            </Button>
+          </form>
+        )}
       </CardContent>
     </Card>
   )

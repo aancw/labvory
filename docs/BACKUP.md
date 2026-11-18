@@ -50,3 +50,21 @@ After any restore, confirm:
 
 Schedule the `pg_dump` command via cron on the Docker host; keep dumps off the same disk as the
 volume. Test restores periodically — a backup you have not restored is a hypothesis.
+
+## Built-in scheduled backups
+
+Lanvory can also snapshot the inventory itself on a schedule: **Settings → Scheduled backups**
+enable JSON snapshots written to disk on an interval (default 24 h), with a retention count
+(default 14) that prunes the oldest files. Each run is recorded in the Activity log, and a failed
+run pushes a webhook alert if notifications are configured.
+
+- Files use the same document shape as **Import & export → Export JSON**, so any snapshot
+  restores losslessly via that page.
+- The directory is relative to the server process (`./backups` by default). In Docker, compose
+  already mounts the `backups` volume at `/app/backups`; on a bare binary, point the setting at a
+  durable path or snapshots die with the host directory.
+- Snapshots are a convenience copy of the inventory — for full data safety (sessions, audit
+  trail, observed metadata) the `pg_dump` above remains the recommended primary backup.
+
+To restore a snapshot: **Import & export → Restore**, upload the JSON file. Restore is additive
+and idempotent — it recreates missing items and leaves existing data untouched.

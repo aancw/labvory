@@ -11,6 +11,7 @@ import { isApiError, isSessionInvalid } from "@/api/client"
 import { useMe } from "@/api/hooks"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AppShell } from "@/components/layout/Topbar"
+import { TOTPRequiredGate } from "@/components/TOTPRequiredGate"
 import { Toaster } from "@/components/ui/sonner"
 import { Spinner } from "@/components/Spinner"
 import { ActivityPage } from "@/pages/ActivityPage"
@@ -71,6 +72,16 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+/** Instance-wide 2FA enforcement: when the server requires a second factor
+ *  and this account has none yet, everything but enrollment is walled off
+ *  (the data API refuses these calls too — this gate just avoids the 403s). */
+function RequireTwoFactor({ children }: { children: ReactNode }) {
+  const me = useMe()
+  const pending = me.data?.require_2fa === true && me.data.user.totp_enabled_at == null
+  if (pending) return <TOTPRequiredGate />
+  return <>{children}</>
+}
+
 function RequireNoAuth({ children }: { children: ReactNode }) {
   const me = useMe()
   if (me.isPending) return <FullScreenSpinner />
@@ -106,7 +117,9 @@ const router = createBrowserRouter([
   {
     element: (
       <RequireAuth>
-        <AppShell />
+        <RequireTwoFactor>
+          <AppShell />
+        </RequireTwoFactor>
       </RequireAuth>
     ),
     children: [

@@ -63,6 +63,36 @@ func (s *Server) enforceRoles(next http.Handler) http.Handler {
 	})
 }
 
+// requireTwoFactor enforces the instance-wide "require two-factor
+// authentication" setting: while it is on, callers without an active TOTP
+// enrollment are walled off from the data API. Authentication and 2FA
+// setup/enable endpoints stay reachable so an unenrolled user can always
+// complete enrollment (and sign out) — nobody can be locked out of their own
+// account by the setting.
+func (s *Server) requireTwoFactor(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := currentUser(r)
+		if user.ID == "" || user.TOTPEnabledAt != nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+		required, err := s.settings.GetBool(r.Context(), "security.require_2fa")
+		if err != nil {
+			s.logger.Error("load require_2fa setting failed", "error", err)
+			// Fail closed would lock every session out on a DB hiccup; the
+			// setting is a hardening layer, so degrade open instead.
+			next.ServeHTTP(w, r)
+			return
+		}
+		if required {
+			httpx.Error(w, r, http.StatusForbidden, "totp_required",
+				"Two-factor authentication is required on this instance. Set it up before continuing.", nil)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // ---------- user management ----------
 
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {

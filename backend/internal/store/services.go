@@ -48,6 +48,17 @@ type ServiceEndpoint struct {
 	// TLS-protected probe succeeded.
 	CertNotAfter *time.Time `json:"cert_not_after,omitempty"`
 	CertSubject  string     `json:"cert_subject"`
+
+	// Operator-declared planned maintenance: while in the future, down/
+	// recovered notifications are suppressed and the endpoint is excluded
+	// from the dashboard "services down" alert.
+	MaintenanceUntil *time.Time `json:"maintenance_until,omitempty"`
+}
+
+// InMaintenance reports whether the endpoint's declared maintenance window
+// is currently active.
+func (e ServiceEndpoint) InMaintenance(now time.Time) bool {
+	return e.MaintenanceUntil != nil && e.MaintenanceUntil.After(now)
 }
 
 // CertObservation is the leaf certificate observed on one probe.
@@ -183,7 +194,7 @@ func (s *Services) ListEndpoints(ctx context.Context, serviceID string) ([]Servi
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, service_id, label, protocol, port, url, is_external,
 		       health_enabled, last_checked_at, last_status, last_latency_ms, COALESCE(last_error, ''),
-		       cert_not_after, cert_subject
+		       cert_not_after, cert_subject, maintenance_until
 		FROM service_endpoints WHERE service_id=$1 ORDER BY is_external, protocol, port`, serviceID)
 	if err != nil {
 		return nil, err
@@ -205,11 +216,11 @@ func (s *Services) ListEndpoints(ctx context.Context, serviceID string) ([]Servi
 type rowScanner interface{ Scan(dest ...any) error }
 
 // scanEndpoint scans the full observed endpoint column set (declared fields,
-// health state, TLS certificate observation).
+// health state, TLS certificate observation, maintenance window).
 func scanEndpoint(r rowScanner, e *ServiceEndpoint) error {
 	return r.Scan(&e.ID, &e.ServiceID, &e.Label, &e.Protocol, &e.Port, &e.URL, &e.IsExternal,
 		&e.HealthEnabled, &e.LastCheckedAt, &e.LastStatus, &e.LastLatencyMS, &e.LastError,
-		&e.CertNotAfter, &e.CertSubject)
+		&e.CertNotAfter, &e.CertSubject, &e.MaintenanceUntil)
 }
 
 // Endpoint returns one endpoint by id.
@@ -218,7 +229,7 @@ func (s *Services) Endpoint(ctx context.Context, id string) (ServiceEndpoint, er
 	err := scanEndpoint(s.pool.QueryRow(ctx, `
 		SELECT id, service_id, label, protocol, port, url, is_external,
 		       health_enabled, last_checked_at, last_status, last_latency_ms, COALESCE(last_error, ''),
-		       cert_not_after, cert_subject
+		       cert_not_after, cert_subject, maintenance_until
 		FROM service_endpoints WHERE id=$1`, id), &e)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ServiceEndpoint{}, ErrNotFound
@@ -239,7 +250,7 @@ func (s *Services) DueHealthEndpoints(ctx context.Context, olderThan time.Durati
 	rows, err := s.pool.Query(ctx, `
 		SELECT e.id, e.service_id, e.label, e.protocol, e.port, e.url, e.is_external,
 		       e.health_enabled, e.last_checked_at, e.last_status, e.last_latency_ms, COALESCE(e.last_error, ''),
-		       e.cert_not_after, e.cert_subject,
+		       e.cert_not_after, e.cert_subject, e.maintenance_until,
 		       sv.name
 		FROM service_endpoints e
 		JOIN services sv ON sv.id = e.service_id
@@ -255,7 +266,7 @@ func (s *Services) DueHealthEndpoints(ctx context.Context, olderThan time.Durati
 		var e HealthEndpoint
 		if err := rows.Scan(&e.ID, &e.ServiceID, &e.Label, &e.Protocol, &e.Port, &e.URL, &e.IsExternal,
 			&e.HealthEnabled, &e.LastCheckedAt, &e.LastStatus, &e.LastLatencyMS, &e.LastError,
-			&e.CertNotAfter, &e.CertSubject,
+			&e.CertNotAfter, &e.CertSubject, &e.MaintenanceUntil,
 			&e.ServiceName); err != nil {
 			return nil, err
 		}
@@ -403,14 +414,27 @@ func (s *Services) CountCertsExpiring(ctx context.Context, withinDays int) (int,
 
 // CountEndpointsDown returns enabled endpoints whose last check failed
 // (transport error or HTTP >= 400). Endpoints never checked count as unknown,
-// not down.
+// not down; endpoints inside a declared maintenance window are expected to
+// be down, so they are excluded.
 func (s *Services) CountEndpointsDown(ctx context.Context) (int, error) {
 	var n int
 	err := s.pool.QueryRow(ctx, `
 		SELECT count(*) FROM service_endpoints
 		WHERE health_enabled AND last_checked_at IS NOT NULL
-		  AND (last_error <> '' OR last_status IS NULL OR last_status >= 400)`).Scan(&n)
+		  AND (last_error <> '' OR last_status IS NULL OR last_status >= 400)
+		  AND (maintenance_until IS NULL OR maintenance_until <= now())`).Scan(&n)
 	return n, err
+}
+
+// SetEndpointMaintenance sets or clears the planned maintenance window of one
+// endpoint. A nil until clears the window.
+func (s *Services) SetEndpointMaintenance(ctx context.Context, endpointID string, until *time.Time) error {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE service_endpoints SET maintenance_until=$2 WHERE id=$1`, endpointID, until)
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
 }
 
 func (s *Services) CreateEndpoint(ctx context.Context, e *ServiceEndpoint) error {

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -348,6 +349,70 @@ func (s *Server) handleToggleEndpointHealth(w http.ResponseWriter, r *http.Reque
 	s.auditChange(r, currentUser(r), "service_endpoint", id, health.Label, action,
 		map[string]any{"url": health.URL})
 	httpx.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true, "health_enabled": p.Enabled})
+}
+
+// handleSetEndpointMaintenance declares (or clears) a planned maintenance
+// window for one endpoint. While the window is in the future the scheduler
+// keeps probing but suppresses down/recovered notifications and the dashboard
+// "services down" alert excludes the endpoint.
+func (s *Server) handleSetEndpointMaintenance(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "endpointID")
+	if !isUUID(id) {
+		httpx.Error(w, r, http.StatusBadRequest, "invalid_id", "Invalid endpoint id.", nil)
+		return
+	}
+	var p struct {
+		Until *string `json:"until"`
+	}
+	if err := httpx.DecodeJSON(r, &p); err != nil {
+		httpx.Error(w, r, http.StatusBadRequest, "invalid_request", err.Error(), nil)
+		return
+	}
+
+	endpoint, err := s.services.Endpoint(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		httpx.Error(w, r, http.StatusNotFound, "not_found", "Endpoint not found.", nil)
+		return
+	}
+	if err != nil {
+		s.logger.Error("endpoint maintenance: load failed", "error", err)
+		httpx.Error(w, r, http.StatusInternalServerError, "internal", "Could not update endpoint.", nil)
+		return
+	}
+
+	var until *time.Time
+	if p.Until != nil && *p.Until != "" {
+		parsed, perr := time.Parse(time.RFC3339, strings.TrimSpace(*p.Until))
+		if perr != nil {
+			httpx.Error(w, r, http.StatusUnprocessableEntity, "invalid_time",
+				"until must be an RFC 3339 timestamp or null.", nil)
+			return
+		}
+		if !parsed.After(time.Now()) {
+			httpx.Error(w, r, http.StatusUnprocessableEntity, "invalid_time",
+				"The maintenance window must end in the future.", nil)
+			return
+		}
+		until = &parsed
+	}
+
+	if err := s.services.SetEndpointMaintenance(r.Context(), id, until); err != nil {
+		s.logger.Error("endpoint maintenance update failed", "error", err)
+		httpx.Error(w, r, http.StatusInternalServerError, "internal", "Could not update endpoint.", nil)
+		return
+	}
+
+	label := endpoint.Label
+	if label == "" {
+		label = endpoint.URL
+	}
+	action := "maintenance_set"
+	changes := map[string]any{"maintenance_until": map[string]any{"to": until}}
+	if until == nil {
+		action = "maintenance_cleared"
+	}
+	s.auditChange(r, currentUser(r), "service_endpoint", id, label, action, changes)
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "maintenance_until": until})
 }
 
 // ---------- deployments ----------

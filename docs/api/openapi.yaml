@@ -33,9 +33,9 @@ paths:
       responses: { "201": { description: Created }, "403": { description: Closed }, "409": { description: Taken }, "422": { description: Invalid }, "429": { description: Rate limited } }
   /api/v1/auth/login: { post: { tags: [auth], summary: Login, responses: { "200": { description: OK }, "401": { description: Invalid }, "429": { description: Rate limited } } } }
   /api/v1/auth/logout: { post: { tags: [auth], summary: Logout, responses: { "200": { description: OK } } } }
-  /api/v1/auth/me: { get: { tags: [auth], summary: "Current user", responses: { "200": { description: OK }, "401": { description: Unauthenticated } } } }
+  /api/v1/auth/me: { get: { tags: [auth], summary: "Current user (+ require_2fa instance flag)", responses: { "200": { description: OK }, "401": { description: Unauthenticated } } } }
   /api/v1/auth/change-password: { post: { tags: [auth], summary: "Rotate password (revokes other sessions)", responses: { "200": { description: OK }, "403": { description: Wrong password } } } }
-  /api/v1/settings: { get: { tags: [system], summary: "Instance settings", responses: { "200": { description: OK } } }, put: { tags: [system], summary: "Update whitelisted settings", responses: { "200": { description: OK }, "422": { description: Invalid } } } }
+  /api/v1/settings: { get: { tags: [system], summary: "Instance settings", responses: { "200": { description: OK } } }, put: { tags: [system], summary: "Update whitelisted settings (instance/theme, notifications.webhook_url, audit.retention_days, backup.*, security.require_2fa)", responses: { "200": { description: OK }, "422": { description: Invalid } } } }
   /api/v1/dashboard: { get: { tags: [system], summary: "Dashboard aggregates incl. alerts, OS/host/subnet breakdowns", responses: { "200": { description: OK } } } }
   /api/v1/activity:
     get:
@@ -134,6 +134,12 @@ paths:
   /api/v1/services/{serviceID}/endpoints: { post: { tags: [services], summary: Add endpoint, responses: { "201": { description: Created } } } }
   /api/v1/services/{serviceID}/deployments: { post: { tags: [services], summary: "Map to host (unique per host)", responses: { "201": { description: Created }, "409": { description: Duplicate } } } }
   /api/v1/service-endpoints/{endpointID}: { delete: { tags: [services], summary: Remove endpoint, responses: { "200": { description: OK } } } }
+  /api/v1/service-endpoints/{endpointID}/health: { put: { tags: [services], summary: "Toggle scheduler health checks", responses: { "200": { description: OK } } } }
+  /api/v1/service-endpoints/{endpointID}/maintenance:
+    post:
+      tags: [services]
+      summary: "Declare/clear planned maintenance ({ until: RFC3339|null }). While active, down/recovered notifications are muted and the dashboard down-alert skips the endpoint."
+      responses: { "200": { description: OK }, "404": { description: Missing }, "422": { description: Invalid time } }
   /api/v1/service-deployments/{deploymentID}: { delete: { tags: [services], summary: Unmap host, responses: { "200": { description: OK } } } }
   /api/v1/topology: { get: { tags: [topology], summary: "Asset graph: nodes + explicit edges (hosts, relationships w/ ports). Physical links are never inferred.", responses: { "200": { description: OK } } } }
   /api/v1/export/inventory.json: { get: { tags: [import-export], summary: "Full inventory export (stable natural keys)", responses: { "200": { description: OK } } } }
