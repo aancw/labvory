@@ -5,6 +5,8 @@ frontend/dist/
 # Builds
 backend/lanvory
 lanvory-server
+dist-release/
+backend/internal/web/dist/
 *.log
 
 # Environment

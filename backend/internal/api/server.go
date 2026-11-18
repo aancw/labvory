@@ -5,6 +5,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,7 +19,12 @@ import (
 	"github.com/aancw/lanvory/internal/scheduler"
 	"github.com/aancw/lanvory/internal/secrets"
 	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/lanvory/internal/web"
 )
+
+// Version is stamped by release builds via -ldflags -X; "dev" otherwise.
+// Surfaced in the health endpoints and the startup log.
+var Version = "dev"
 
 // Server carries the dependencies handlers need.
 type Server struct {
@@ -189,8 +195,16 @@ func (s *Server) Routes() http.Handler {
 	s.mountDataRoutes(dataMux)
 	s.dataRouter = dataMux
 
-	// Unknown API route.
+	// Unknown route. API paths keep JSON errors; everything else goes to the
+	// embedded web UI (index.html fallback for client-side routes). GET/HEAD
+	// only — other methods on unknown paths have no meaningful page to render.
+	webUI := web.Handler()
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		if (r.Method == http.MethodGet || r.Method == http.MethodHead) &&
+			!strings.HasPrefix(r.URL.Path, "/api") {
+			webUI.ServeHTTP(w, r)
+			return
+		}
 		httpx.Error(w, r, http.StatusNotFound, "not_found", "Resource not found.", nil)
 	})
 	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
@@ -362,5 +376,6 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{
 		"status":   "ok",
 		"database": "ok",
+		"version":  Version,
 	})
 }

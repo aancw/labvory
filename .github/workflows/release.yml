@@ -1,0 +1,114 @@
+# Release: publish standalone binaries on GitHub Releases.
+#
+# Triggered by pushing a `v*` tag (`git tag v0.1.0 && git push origin v0.1.0`).
+# Each archive contains the lanvory binary with the web UI embedded
+# (go:embed, -tags embed) plus the LICENSE; PostgreSQL is the only external
+# dependency. Linux uses CGO_ENABLED=0 (pure-Go afpacket ARP sweep); darwin
+# needs cgo for libpcap, so those build on macOS runners (cross-compiling
+# amd64 from the arm64 runner works via Apple clang) and are ad-hoc signed —
+# macOS 15+ refuses quarantined unsigned binaries ("damaged").
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build web UI
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: frontend/dist/
+          if-no-files-found: error
+
+  binaries:
+    needs: web
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: linux, arch: amd64, runner: ubuntu-latest, cgo: "0" }
+          - { os: linux, arch: arm64, runner: ubuntu-latest, cgo: "0" }
+          - { os: darwin, arch: amd64, runner: macos-latest, cgo: "1" }
+          - { os: darwin, arch: arm64, runner: macos-latest, cgo: "1" }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: backend/internal/web/dist
+
+      - name: Build
+        working-directory: backend
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          CGO_ENABLED=${{ matrix.cgo }} go build \
+            -trimpath -tags embed \
+            -ldflags "-s -w -X github.com/aancw/lanvory/internal/api.Version=${GITHUB_REF_NAME}" \
+            -o ../lanvory ./cmd/server
+
+      - name: Ad-hoc sign (macOS)
+        if: matrix.os == 'darwin'
+        run: codesign -s - --force lanvory
+
+      - name: Package
+        run: |
+          DIR="lanvory-${GITHUB_REF_NAME}-${{ matrix.os }}-${{ matrix.arch }}"
+          mkdir "$DIR"
+          cp lanvory "$DIR/"
+          cp LICENSE "$DIR/"
+          tar czf "$DIR.tar.gz" "$DIR"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: archive-${{ matrix.os }}-${{ matrix.arch }}
+          path: "*.tar.gz"
+          if-no-files-found: error
+
+  release:
+    needs: binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: archive-*
+          merge-multiple: true
+          path: archives
+
+      - name: Checksums
+        working-directory: archives
+        run: sha256sum *.tar.gz > sha256sums.txt
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            archives/*.tar.gz
+            archives/sha256sums.txt
+          generate_release_notes: true

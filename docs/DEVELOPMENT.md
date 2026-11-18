@@ -44,6 +44,15 @@ both processes on Ctrl+C. `make run` does the same against a production build.
    Open the printed URL (default `http://localhost:5173`, or `http://<host-ip>:5173` remotely).
    First visit → setup wizard.
 
+## Release builds (embedded web UI)
+
+The standalone binary embeds the built SPA with `go:embed` (`backend/internal/web`):
+
+- Plain builds (`go build ./...`, tests) carry no assets and serve a fallback page — the embed tag is never required for development.
+- `make release` builds the UI, copies `frontend/dist` to `backend/internal/web/dist` (gitignored), and produces the standalone binary in `dist-release/`.
+- Pushing a `v*` tag runs [.github/workflows/release.yml](../.github/workflows/release.yml), which builds the same binary for linux/darwin × amd64/arm64 and publishes archives + checksums to GitHub Releases.
+- `api.Version` is stamped via `-ldflags -X github.com/aancw/lanvory/internal/api.Version=<tag>`; locally it reports `dev`.
+
 ## Tests
 
 ```bash
@@ -68,7 +77,7 @@ The integration test truncates the target database — only point it at a dispos
 ## Repository layout
 
 ```
-backend/    Go API (cmd/server + internal/{api,auth,config,db,httpx,store})
+backend/    Go API (cmd/server + internal/{api,auth,config,db,httpx,store,web})
 frontend/   React SPA (src/{api,components,pages})
 deploy/     docker-compose.yml + .env.example
 docs/       operations & development guides, OpenAPI spec, MCP agent guide

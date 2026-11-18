@@ -95,7 +95,7 @@ func main() {
 
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("lanvory api listening", "addr", cfg.Addr, "env", cfg.Env)
+		logger.Info("lanvory api listening", "addr", cfg.Addr, "env", cfg.Env, "version", api.Version)
 		errCh <- srv.ListenAndServe()
 	}()
 

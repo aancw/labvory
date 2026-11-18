@@ -18,6 +18,19 @@ Lanvory replaces scattered spreadsheets and notes. It runs locally as a Go API, 
 - **Agent access:** an MCP server at `/mcp` exposes CRUD operations to agents using revocable, database-backed tokens. See [the MCP guide](docs/MCP.md).
 - **Security and auditing:** Argon2id password hashing, optional TOTP two-factor authentication, multi-user accounts with admin/operator/viewer roles, server-side sessions with per-device visibility and remote sign-out, CSRF protection, rate-limited authentication, webhook alerts for sign-ins from new devices and failed-login bursts, an activity log with optional automatic retention, and encrypted integration secrets.
 
+## Install a standalone binary
+
+Release builds embed the web UI in a single Go binary — PostgreSQL is the only external dependency. Download the archive for your platform from [GitHub Releases](https://github.com/aancw/lanvory/releases), then:
+
+```bash
+tar xzf lanvory_<version>_linux_amd64.tar.gz
+LV_DATABASE_URL=postgres://lanvory:lanvory@localhost:5432/lanvory?sslmode=disable ./lanvory
+```
+
+Migrations run automatically on first boot, and the web UI, API, and `/mcp` are all served from one port (default `:8090`, override with `LV_ADDR`). Set `LV_SECRET_KEY` (see `make secret-key`) to enable integration secrets and two-factor authentication.
+
+For ARP scans and ICMP checks on Linux, grant the binary raw-socket access once: `sudo setcap cap_net_raw+ep ./lanvory` (on macOS, run with `sudo` for ARP). See [LAN discovery](#lan-discovery) for the Docker alternative.
+
 ## Run with Docker Compose
 
 Docker Compose starts the web app, API, and PostgreSQL database:

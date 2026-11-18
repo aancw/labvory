@@ -13,6 +13,8 @@ SHELL := /bin/bash
 
 PG_CONTAINER ?= lanvory-pg
 PG_PORT      ?= 5432
+# Where `make release` drops the standalone binary.
+RELEASE_DIR  ?= dist-release
 # 8080 is deliberately avoided: it commonly collides with other local tools.
 API_PORT     ?= 8090
 WEB_PORT     ?= 4173
@@ -160,4 +162,21 @@ test:
 	cd backend && go build ./... && go vet ./... && go test ./...
 	cd frontend && npm run typecheck
 
-.PHONY: help db db-stop demo demo-stop install backend web run dev build test secret-key
+# --- Release ---------------------------------------------------------------
+# Builds the standalone binary: web UI embedded via -tags embed, PostgreSQL is
+# the only external dependency. The release workflow (.github/workflows/
+# release.yml) does the same for every supported platform on a `v*` tag push.
+
+## Build the standalone binary (web UI embedded) for this platform.
+release: install
+	@echo "▶ building web UI..."
+	@cd frontend && npm run build
+	@echo "▶ embedding web UI into the binary..."
+	@rm -rf backend/internal/web/dist
+	@cp -R frontend/dist backend/internal/web/dist
+	@mkdir -p $(RELEASE_DIR)
+	@cd backend && go build -trimpath -tags embed \
+		-ldflags "-s -w" -o ../$(RELEASE_DIR)/lanvory ./cmd/server
+	@echo "✔ standalone binary: $(RELEASE_DIR)/lanvory (UI embedded; needs LV_DATABASE_URL)"
+
+.PHONY: help db db-stop demo demo-stop install backend web run dev build test secret-key release
