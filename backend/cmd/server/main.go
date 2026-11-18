@@ -4,6 +4,8 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -19,7 +21,25 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	// Flags first: -version needs no config, and -config determines which
+	// TOML file feeds config.Load().
+	configPath := flag.String("config", "", "TOML config file (default: ./"+config.DefaultConfigFile+" if present)")
+	showVersion := flag.Bool("version", false, "print version and exit")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(api.Version)
+		return
+	}
+
+	// Load resolves built-in defaults, the TOML config file, and LV_*
+	// environment variables (environment wins). An explicitly named file
+	// must exist; the default ./lanvory.toml is used only when present.
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "config: %v\n", err)
+		os.Exit(1)
+	}
 	logger := cfg.Logger()
 
 	if err := db.Migrate(cfg.DatabaseURL); err != nil {

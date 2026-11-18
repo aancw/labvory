@@ -50,7 +50,8 @@ The standalone binary embeds the built SPA with `go:embed` (`backend/internal/we
 
 - Plain builds (`go build ./...`, tests) carry no assets and serve a fallback page — the embed tag is never required for development.
 - `make release` builds the UI, copies `frontend/dist` to `backend/internal/web/dist` (gitignored), and produces the standalone binary in `dist-release/`.
-- Pushing a `v*` tag runs [.github/workflows/release.yml](../.github/workflows/release.yml), which builds the same binary for linux/darwin × amd64/arm64 and publishes archives + checksums to GitHub Releases.
+- Configuration: `./lanvory.toml` (or `-config <path>`, TOML, unknown keys rejected — see `deploy/lanvory.toml.example`), with `LV_*` environment variables winning over the file. Docker deployments use environment variables alone.
+- Pushing a `v*` tag runs [.github/workflows/release.yml](../.github/workflows/release.yml), which builds the same binary for linux/darwin × amd64/arm64 and publishes archives (binary + LICENSE + `lanvory.toml.example`) + checksums to GitHub Releases.
 - `api.Version` is stamped via `-ldflags -X github.com/aancw/lanvory/internal/api.Version=<tag>`; locally it reports `dev`.
 
 ## Tests

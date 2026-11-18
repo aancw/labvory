@@ -177,6 +177,6 @@ release: install
 	@mkdir -p $(RELEASE_DIR)
 	@cd backend && go build -trimpath -tags embed \
 		-ldflags "-s -w" -o ../$(RELEASE_DIR)/lanvory ./cmd/server
-	@echo "✔ standalone binary: $(RELEASE_DIR)/lanvory (UI embedded; needs LV_DATABASE_URL)"
+	@echo "✔ standalone binary: $(RELEASE_DIR)/lanvory (UI embedded; configure via lanvory.toml or LV_* env)"
 
 .PHONY: help db db-stop demo demo-stop install backend web run dev build test secret-key release

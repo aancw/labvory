@@ -1,0 +1,29 @@
+# Lanvory standalone binary configuration.
+# The binary reads ./lanvory.toml from its working directory, or the file
+# given with -config /path/to/lanvory.toml. Environment variables (LV_*)
+# still work and override this file. Unknown keys are rejected as errors.
+# Copy this file to lanvory.toml next to the binary and adjust.
+
+# PostgreSQL connection string. Migrations run automatically on first boot.
+database_url = "postgres://lanvory:change-me@localhost:5432/lanvory?sslmode=disable"
+
+# Listen address for the web UI, API, and /mcp (all served from one port).
+addr = "0.0.0.0:8090"
+
+# 32-byte hex key encrypting integration credentials at rest. Required for
+# Proxmox tokens and two-factor enrollment; without it, secret storage and
+# 2FA are disabled. Generate: openssl rand -hex 32
+secret_key = ""
+
+# Set true when Lanvory is served over HTTPS (e.g. behind a TLS-terminating
+# reverse proxy). Marks session and CSRF cookies Secure.
+cookie_secure = false
+
+# Sliding session lifetime (Go duration string). Default: 336h (14 days).
+# session_ttl = "336h"
+
+# "development" switches logging to human-readable text.
+# env = "production"
+
+# Populate an EMPTY database with a sample homelab:
+# seed_mode = "dev"

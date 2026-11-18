@@ -3,6 +3,7 @@ module github.com/aancw/lanvory
 go 1.27
 
 require (
+	github.com/BurntSushi/toml v1.6.0
 	github.com/alexedwards/argon2id v1.0.0
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/golang-migrate/migrate/v4 v4.20.1

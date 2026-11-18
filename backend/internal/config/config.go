@@ -1,12 +1,25 @@
-// Package config loads Lanvory configuration from environment variables.
+// Package config loads Lanvory configuration: a TOML file for the standalone
+// binary (lanvory.toml, see deploy/lanvory.toml.example) and LV_* environment
+// variables — the latter win when both define a setting. Docker deployments
+// keep using environment variables alone.
 package config
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/BurntSushi/toml"
 )
+
+// DefaultConfigFile is the TOML file the standalone binary reads when started
+// without -config, if it exists in the working directory.
+const DefaultConfigFile = "lanvory.toml"
 
 // Config is the resolved runtime configuration.
 type Config struct {
@@ -22,29 +35,133 @@ type Config struct {
 	Env string
 	// SeedMode: empty for production; "dev" applies the homelab seed after migrations.
 	SeedMode string
-	// SecretKey (LV_SECRET_KEY) encrypts integration credentials at rest.
+	// SecretKey encrypts integration credentials at rest.
 	SecretKey string
 }
 
-// Load reads configuration from the environment with sensible local defaults.
-func Load() Config {
-	return Config{
-		Addr:         env("LV_ADDR", "0.0.0.0:8090"),
-		DatabaseURL:  firstEnv("postgres://lanvory:lanvory@localhost:5432/lanvory?sslmode=disable", "LV_DATABASE_URL", "DATABASE_URL"),
-		CookieSecure: envBool("LV_COOKIE_SECURE", false),
-		SessionTTL:   envDuration("LV_SESSION_TTL", 14*24*time.Hour),
-		Env:          env("LV_ENV", "production"),
-		SeedMode:     env("LV_SEED_MODE", ""),
-		SecretKey:    env("LV_SECRET_KEY", ""),
+// fileConfig mirrors the TOML config file. Pointer fields distinguish
+// "unset" from Go zero values, so the merge below knows what the file said.
+type fileConfig struct {
+	Addr         *string `toml:"addr"`
+	DatabaseURL  *string `toml:"database_url"`
+	SecretKey    *string `toml:"secret_key"`
+	CookieSecure *bool   `toml:"cookie_secure"`
+	SessionTTL   *string `toml:"session_ttl"`
+	Env          *string `toml:"env"`
+	SeedMode     *string `toml:"seed_mode"`
+}
+
+// Load resolves configuration with precedence: environment variables over
+// the TOML config file over built-in defaults. A non-empty configPath must
+// exist; the empty path falls back to ./lanvory.toml when present. Unknown
+// keys in the file are errors — typos must not silently disable a setting.
+func Load(configPath string) (Config, error) {
+	explicit := configPath != ""
+	if !explicit {
+		configPath = DefaultConfigFile
+	}
+
+	var file fileConfig
+	data, err := os.ReadFile(configPath)
+	switch {
+	case errors.Is(err, fs.ErrNotExist) && !explicit:
+		// No default file: environment and defaults only.
+	case err != nil:
+		return Config{}, err
+	default:
+		if err := decodeFile(data, &file); err != nil {
+			return Config{}, fmt.Errorf("config file %s: %w", configPath, err)
+		}
+		warnWorldReadable(configPath, file)
+	}
+
+	cfg := Config{
+		Addr:         resolveString(file.Addr, "LV_ADDR", "0.0.0.0:8090"),
+		DatabaseURL:  resolveDatabaseURL(file.DatabaseURL),
+		SecretKey:    resolveString(file.SecretKey, "LV_SECRET_KEY", ""),
+		Env:          resolveString(file.Env, "LV_ENV", "production"),
+		SeedMode:     resolveString(file.SeedMode, "LV_SEED_MODE", ""),
+		CookieSecure: resolveBool(file.CookieSecure, "LV_COOKIE_SECURE", false),
+	}
+
+	ttl := os.Getenv("LV_SESSION_TTL")
+	switch {
+	case ttl != "":
+		cfg.SessionTTL = envDuration("LV_SESSION_TTL", 14*24*time.Hour)
+	case file.SessionTTL != nil:
+		d, err := time.ParseDuration(*file.SessionTTL)
+		if err != nil {
+			return Config{}, fmt.Errorf("config file %s: session_ttl: %w", configPath, err)
+		}
+		cfg.SessionTTL = d
+	default:
+		cfg.SessionTTL = 14 * 24 * time.Hour
+	}
+	return cfg, nil
+}
+
+// decodeFile parses TOML strictly: any key not consumed by fileConfig (i.e. a
+// typo) is reported instead of ignored.
+func decodeFile(data []byte, into *fileConfig) error {
+	md, err := toml.NewDecoder(bytes.NewReader(data)).Decode(into)
+	if err != nil {
+		return err
+	}
+	if unknown := md.Undecoded(); len(unknown) > 0 {
+		names := make([]string, len(unknown))
+		for i, k := range unknown {
+			names[i] = k.String()
+		}
+		return fmt.Errorf("unknown key(s): %q", names)
+	}
+	return nil
+}
+
+// warnWorldReadable flags a config file carrying secret_key that other users
+// on the host could read. Startup diagnostics run before the real logger
+// exists, so the default logger is fine here.
+func warnWorldReadable(path string, file fileConfig) {
+	if file.SecretKey == nil || *file.SecretKey == "" {
+		return
+	}
+	if info, err := os.Stat(path); err == nil && info.Mode().Perm()&0o044 != 0 {
+		slog.Default().Warn("config file is world-readable and holds secret_key — consider chmod 600",
+			"file", path)
 	}
 }
 
-// firstEnv returns the first non-empty variable among keys, falling back to `fallback`.
-func firstEnv(fallback string, keys ...string) string {
-	for _, k := range keys {
-		if v := os.Getenv(k); v != "" {
+// resolveString: environment wins, then the file value, then the default.
+func resolveString(fileVal *string, envKey, fallback string) string {
+	if v := os.Getenv(envKey); v != "" {
+		return v
+	}
+	if fileVal != nil {
+		return *fileVal
+	}
+	return fallback
+}
+
+// resolveDatabaseURL also honours the DATABASE_URL spelling before defaults.
+func resolveDatabaseURL(fileVal *string) string {
+	for _, key := range []string{"LV_DATABASE_URL", "DATABASE_URL"} {
+		if v := os.Getenv(key); v != "" {
 			return v
 		}
+	}
+	if fileVal != nil {
+		return *fileVal
+	}
+	return "postgres://lanvory:lanvory@localhost:5432/lanvory?sslmode=disable"
+}
+
+// resolveBool treats a missing environment variable as unset so the file can
+// still provide the value.
+func resolveBool(fileVal *bool, envKey string, fallback bool) bool {
+	if os.Getenv(envKey) != "" {
+		return envBool(envKey, fallback)
+	}
+	if fileVal != nil {
+		return *fileVal
 	}
 	return fallback
 }

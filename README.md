@@ -24,10 +24,11 @@ Release builds embed the web UI in a single Go binary — PostgreSQL is the only
 
 ```bash
 tar xzf lanvory_<version>_linux_amd64.tar.gz
-LV_DATABASE_URL=postgres://lanvory:lanvory@localhost:5432/lanvory?sslmode=disable ./lanvory
+cp lanvory.toml.example lanvory.toml        # then edit database_url + secret_key
+./lanvory                                   # or: ./lanvory -config /etc/lanvory/lanvory.toml
 ```
 
-Migrations run automatically on first boot, and the web UI, API, and `/mcp` are all served from one port (default `:8090`, override with `LV_ADDR`). Set `LV_SECRET_KEY` (see `make secret-key`) to enable integration secrets and two-factor authentication.
+The binary reads `./lanvory.toml` or the file given with `-config`; `LV_*` environment variables still work and win over the file. Migrations run automatically on first boot, and the web UI, API, and `/mcp` are all served from one port (default `:8090`, override with `addr`). Set `secret_key` (see `make secret-key`) to enable integration secrets and two-factor authentication. `./lanvory -version` prints the release version.
 
 For ARP scans and ICMP checks on Linux, grant the binary raw-socket access once: `sudo setcap cap_net_raw+ep ./lanvory` (on macOS, run with `sudo` for ARP). See [LAN discovery](#lan-discovery) for the Docker alternative.
 
