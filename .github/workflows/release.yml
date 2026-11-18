@@ -20,9 +20,9 @@ jobs:
   web:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -34,7 +34,7 @@ jobs:
           npm ci
           npm run build
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: web-dist
           path: frontend/dist/
@@ -52,13 +52,15 @@ jobs:
           - { os: darwin, arch: arm64, runner: macos-latest, cgo: "1" }
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod
+          # Module cache lives in backend/, not the repo root.
+          cache-dependency-path: backend/go.sum
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v6
         with:
           name: web-dist
           path: backend/internal/web/dist
@@ -87,7 +89,7 @@ jobs:
           cp deploy/lanvory.toml.example "$DIR/"
           tar czf "$DIR.tar.gz" "$DIR"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: archive-${{ matrix.os }}-${{ matrix.arch }}
           path: "*.tar.gz"
@@ -97,7 +99,7 @@ jobs:
     needs: binaries
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v6
         with:
           pattern: archive-*
           merge-multiple: true
