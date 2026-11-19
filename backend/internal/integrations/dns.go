@@ -14,8 +14,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/aancw/lanvory/internal/dnsx"
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/dnsx"
+	"github.com/aancw/labvory/internal/store"
 )
 
 // SyncDNS enumerates a domain's records and stores them as observed subdomains.
@@ -209,7 +209,7 @@ func crtNameHosts(ctx context.Context, apex string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "lanvory-dns-sync/1.0")
+	req.Header.Set("User-Agent", "labvory-dns-sync/1.0")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("crt.name request: %w", err)

@@ -1,4 +1,4 @@
--- Lanvory initial schema: full normalized model (see ARCHITECTURE.md ERD).
+-- LabVory initial schema: full normalized model (see ARCHITECTURE.md ERD).
 
 CREATE TABLE users (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),

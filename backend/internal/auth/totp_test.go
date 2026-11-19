@@ -75,7 +75,7 @@ func TestGenerateTOTPSecret(t *testing.T) {
 
 func TestOTPAuthURI(t *testing.T) {
 	uri := OTPAuthURI("aan", rfcSecret)
-	want := "otpauth://totp/Lanvory:aan?digits=6&issuer=Lanvory&period=30&secret=" + rfcSecret
+	want := "otpauth://totp/LabVory:aan?digits=6&issuer=LabVory&period=30&secret=" + rfcSecret
 	if uri != want {
 		t.Fatalf("OTPAuthURI = %s, want %s", uri, want)
 	}

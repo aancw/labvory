@@ -1,5 +1,5 @@
 # Local-runtime override: uses host-built artifacts (no registry access needed).
-#   backend:  GOOS=linux go build -C backend -o deploy/backend-build/lanvory-linux ./cmd/server
+#   backend:  GOOS=linux go build -C backend -o deploy/backend-build/labvory-linux ./cmd/server
 #   frontend: npm --prefix frontend run build
 # Then: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
 services:

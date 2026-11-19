@@ -7,8 +7,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/aancw/lanvory/internal/httpx"
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/httpx"
+	"github.com/aancw/labvory/internal/store"
 )
 
 // ---------- API tokens (bearer credentials for machine clients) ----------
@@ -103,14 +103,14 @@ func (s *Server) bearerAuth(next http.Handler) http.Handler {
 		header := r.Header.Get("Authorization")
 		token, ok := strings.CutPrefix(header, "Bearer ")
 		if !ok || !strings.HasPrefix(token, "lv_") {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="lanvory"`)
+			w.Header().Set("WWW-Authenticate", `Bearer realm="labvory"`)
 			httpx.Error(w, r, http.StatusUnauthorized, "unauthorized",
 				"Authentication required: send an API token as `Authorization: Bearer lv_...`.", nil)
 			return
 		}
 		tok, user, err := s.tokens.Resolve(r.Context(), token)
 		if errors.Is(err, store.ErrNotFound) {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="lanvory"`)
+			w.Header().Set("WWW-Authenticate", `Bearer realm="labvory"`)
 			httpx.Error(w, r, http.StatusUnauthorized, "unauthorized", "Invalid or revoked API token.", nil)
 			return
 		}

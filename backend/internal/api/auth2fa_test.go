@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aancw/lanvory/internal/auth"
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/auth"
+	"github.com/aancw/labvory/internal/store"
 )
 
 // TestTwoFactorFlow covers the TOTP lifecycle: enrollment, confirmation,
@@ -36,7 +36,7 @@ func TestTwoFactorFlow(t *testing.T) {
 	// Enrollment: setup returns the secret and the otpauth URI.
 	setup := do(http.MethodPost, "/api/v1/auth/2fa/setup", nil, http.StatusOK)
 	secret := setup["secret"].(string)
-	if !strings.Contains(setup["otpauth_uri"].(string), "otpauth://totp/Lanvory:admin") {
+	if !strings.Contains(setup["otpauth_uri"].(string), "otpauth://totp/LabVory:admin") {
 		t.Fatal("otpauth URI should target the admin account")
 	}
 	if setup["secret"] == "" {

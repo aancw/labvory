@@ -11,8 +11,8 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/aancw/lanvory/internal/secrets"
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/secrets"
+	"github.com/aancw/labvory/internal/store"
 )
 
 var (

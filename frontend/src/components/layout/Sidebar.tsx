@@ -13,7 +13,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
       <div className="flex h-14 items-center gap-2.5 border-b border-sidebar-border px-4">
         <LogoMark />
         <div className="leading-tight">
-          <p className="text-sm font-semibold">Lanvory</p>
+          <p className="text-sm font-semibold">LabVory</p>
           <p className="text-[11px] text-muted-foreground">Homelab Infrastructure</p>
         </div>
       </div>

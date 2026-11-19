@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aancw/lanvory/internal/auth"
-	"github.com/aancw/lanvory/internal/httpx"
-	"github.com/aancw/lanvory/internal/notify"
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/auth"
+	"github.com/aancw/labvory/internal/httpx"
+	"github.com/aancw/labvory/internal/notify"
+	"github.com/aancw/labvory/internal/store"
 )
 
 type setupStatusResponse struct {

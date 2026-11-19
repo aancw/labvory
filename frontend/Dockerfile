@@ -1,4 +1,4 @@
-# Lanvory SPA — build with Vite, serve with nginx (also proxies /api to the backend).
+# LabVory SPA — build with Vite, serve with nginx (also proxies /api to the backend).
 FROM node:20-alpine AS build
 WORKDIR /app
 

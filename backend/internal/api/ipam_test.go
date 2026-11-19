@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aancw/lanvory/internal/auth"
-	"github.com/aancw/lanvory/internal/config"
-	"github.com/aancw/lanvory/internal/db"
-	"github.com/aancw/lanvory/internal/secrets"
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/auth"
+	"github.com/aancw/labvory/internal/config"
+	"github.com/aancw/labvory/internal/db"
+	"github.com/aancw/labvory/internal/secrets"
+	"github.com/aancw/labvory/internal/store"
 )
 
 // TestIPAMWorkflow is the Phase 3 acceptance scenario: contexts, VLANs, subnet

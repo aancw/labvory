@@ -1,4 +1,4 @@
-# Lanvory — Roadmap & Acceptance Criteria
+# LabVory — Roadmap & Acceptance Criteria
 
 Phases are built sequentially; each phase ships working end-to-end functionality before the next begins.
 

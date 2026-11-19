@@ -1,7 +1,7 @@
 # Release: publish standalone binaries on GitHub Releases.
 #
 # Triggered by pushing a `v*` tag (`git tag v0.1.0 && git push origin v0.1.0`).
-# Each archive contains the lanvory binary with the web UI embedded
+# Each archive contains the labvory binary with the web UI embedded
 # (go:embed, -tags embed) plus the LICENSE; PostgreSQL is the only external
 # dependency. Linux uses CGO_ENABLED=0 (pure-Go afpacket ARP sweep); darwin
 # needs cgo for libpcap, so those build on macOS runners (cross-compiling
@@ -73,20 +73,20 @@ jobs:
         run: |
           CGO_ENABLED=${{ matrix.cgo }} go build \
             -trimpath -tags embed \
-            -ldflags "-s -w -X github.com/aancw/lanvory/internal/api.Version=${GITHUB_REF_NAME}" \
-            -o ../lanvory ./cmd/server
+            -ldflags "-s -w -X github.com/aancw/labvory/internal/api.Version=${GITHUB_REF_NAME}" \
+            -o ../labvory ./cmd/server
 
       - name: Ad-hoc sign (macOS)
         if: matrix.os == 'darwin'
-        run: codesign -s - --force lanvory
+        run: codesign -s - --force labvory
 
       - name: Package
         run: |
-          DIR="lanvory-${GITHUB_REF_NAME}-${{ matrix.os }}-${{ matrix.arch }}"
+          DIR="labvory-${GITHUB_REF_NAME}-${{ matrix.os }}-${{ matrix.arch }}"
           mkdir "$DIR"
-          cp lanvory "$DIR/"
+          cp labvory "$DIR/"
           cp LICENSE "$DIR/"
-          cp deploy/lanvory.toml.example "$DIR/"
+          cp deploy/labvory.toml.example "$DIR/"
           tar czf "$DIR.tar.gz" "$DIR"
 
       - uses: actions/upload-artifact@v6

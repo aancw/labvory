@@ -1,5 +1,5 @@
 // Package dnsx provides DNS lookups and a minimal AXFR (zone transfer) client
-// built on the standard library, so Lanvory can observe DNS state without
+// built on the standard library, so LabVory can observe DNS state without
 // external dependencies.
 package dnsx
 

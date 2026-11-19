@@ -8,7 +8,7 @@ All durable state lives in the PostgreSQL volume (`pgdata`) — there is nothing
 
 ```bash
 cd deploy
-docker compose exec db pg_dump -U lanvory -d lanvory -Fc > lanvory-$(date +%F).dump
+docker compose exec db pg_dump -U labvory -d labvory -Fc > labvory-$(date +%F).dump
 ```
 
 **Volume snapshot (cold):** stop compose, copy the volume, start again:
@@ -16,7 +16,7 @@ docker compose exec db pg_dump -U lanvory -d lanvory -Fc > lanvory-$(date +%F).d
 ```bash
 cd deploy
 docker compose stop backend frontend
-docker run --rm -v lanvory_pgdata:/data -v "$PWD":/out alpine \
+docker run --rm -v labvory_pgdata:/data -v "$PWD":/out alpine \
   tar czf /out/pgdata-$(date +%F).tar.gz -C /data .
 docker compose start backend frontend
 ```
@@ -25,7 +25,7 @@ docker compose start backend frontend
 
 ```bash
 cd deploy
-docker compose exec -T db pg_restore -U lanvory -d lanvory --clean --if-exists < lanvory-2026-11-16.dump
+docker compose exec -T db pg_restore -U labvory -d labvory --clean --if-exists < labvory-2026-11-16.dump
 docker compose restart backend
 ```
 
@@ -34,8 +34,8 @@ From a volume snapshot:
 ```bash
 cd deploy
 docker compose down -v   # destroys the current volume
-docker volume create lanvory_pgdata
-docker run --rm -v lanvory_pgdata:/data -v "$PWD":/in alpine \
+docker volume create labvory_pgdata
+docker run --rm -v labvory_pgdata:/data -v "$PWD":/in alpine \
   sh -c "cd /data && tar xzf /in/pgdata-2026-11-16.tar.gz"
 docker compose up -d
 ```
@@ -53,7 +53,7 @@ volume. Test restores periodically — a backup you have not restored is a hypot
 
 ## Built-in scheduled backups
 
-Lanvory can also snapshot the inventory itself on a schedule: **Settings → Scheduled backups**
+LabVory can also snapshot the inventory itself on a schedule: **Settings → Scheduled backups**
 enable JSON snapshots written to disk on an interval (default 24 h), with a retention count
 (default 14) that prunes the oldest files. Each run is recorded in the Activity log, and a failed
 run pushes a webhook alert if notifications are configured.

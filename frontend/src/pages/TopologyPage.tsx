@@ -70,7 +70,7 @@ function computeLayout(nodes: TopologyNode[], edges: TopologyEdge[], view: ViewM
     id: e.id,
     source: e.source,
     target: e.target,
-    type: "lanvory",
+    type: "labvory",
     label: e.kind === "hosts" ? "" : e.kind + (e.source_port || e.target_port ? ` (${e.source_port || "?"}↔${e.target_port || "?"})` : ""),
     style: edgeStyle(e.kind),
     labelStyle: { fontSize: 10, fill: "var(--color-muted-foreground)" },
@@ -126,7 +126,7 @@ function AssetNode({ data, selected }: { data: { asset: TopologyNode }; selected
 
 const nodeTypes = { asset: AssetNode }
 
-function LanvoryEdge(props: EdgeProps) {
+function LabVoryEdge(props: EdgeProps) {
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX: props.sourceX,
     sourceY: props.sourceY,
@@ -149,9 +149,9 @@ function LanvoryEdge(props: EdgeProps) {
   )
 }
 
-const edgeTypes = { lanvory: LanvoryEdge }
+const edgeTypes = { labvory: LabVoryEdge }
 
-const LAYOUT_STORAGE = "lanvory-topology-positions"
+const LAYOUT_STORAGE = "labvory-topology-positions"
 
 export function TopologyPage() {
   const { data, isLoading, isError } = useTopology()

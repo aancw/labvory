@@ -1,11 +1,11 @@
-# Lanvory standalone binary configuration.
-# The binary reads ./lanvory.toml from its working directory, or the file
-# given with -config /path/to/lanvory.toml. Environment variables (LV_*)
+# LabVory standalone binary configuration.
+# The binary reads ./labvory.toml from its working directory, or the file
+# given with -config /path/to/labvory.toml. Environment variables (LV_*)
 # still work and override this file. Unknown keys are rejected as errors.
-# Copy this file to lanvory.toml next to the binary and adjust.
+# Copy this file to labvory.toml next to the binary and adjust.
 
 # PostgreSQL connection string. Migrations run automatically on first boot.
-database_url = "postgres://lanvory:change-me@localhost:5432/lanvory?sslmode=disable"
+database_url = "postgres://labvory:change-me@localhost:5432/labvory?sslmode=disable"
 
 # Listen address for the web UI, API, and /mcp (all served from one port).
 addr = "0.0.0.0:8090"
@@ -15,7 +15,7 @@ addr = "0.0.0.0:8090"
 # 2FA are disabled. Generate: openssl rand -hex 32
 secret_key = ""
 
-# Set true when Lanvory is served over HTTPS (e.g. behind a TLS-terminating
+# Set true when LabVory is served over HTTPS (e.g. behind a TLS-terminating
 # reverse proxy). Marks session and CSRF cookies Secure.
 cookie_secure = false
 

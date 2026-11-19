@@ -1,4 +1,4 @@
-# Lanvory — local development tasks.
+# LabVory — local development tasks.
 #
 #   make db        start the PostgreSQL dev database only (idempotent)
 #   make run       start API + built web UI (production mode, no hot reload)
@@ -11,24 +11,24 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-PG_CONTAINER ?= lanvory-pg
+PG_CONTAINER ?= labvory-pg
 PG_PORT      ?= 5432
 # Where `make release` drops the standalone binary.
 RELEASE_DIR  ?= dist-release
 # 8080 is deliberately avoided: it commonly collides with other local tools.
 API_PORT     ?= 8090
 WEB_PORT     ?= 4173
-DB_USER      ?= lanvory
-DB_PASSWORD  ?= lanvory
-DB_NAME      ?= lanvory
+DB_USER      ?= labvory
+DB_PASSWORD  ?= labvory
+DB_NAME      ?= labvory
 # Demo: a disposable database, freshly seeded with sample homelab data on each run.
-DEMO_CONTAINER ?= lanvory-pg-demo
+DEMO_CONTAINER ?= labvory-pg-demo
 DEMO_PORT      ?= 5433
 DEMO_URL       := postgres://$(DB_USER):$(DB_PASSWORD)@localhost:$(DEMO_PORT)/$(DB_NAME)?sslmode=disable
 
 
 help:
-	@echo "Lanvory — local development"
+	@echo "LabVory — local development"
 	@echo "  make db        start the PostgreSQL dev database only (idempotent)"
 	@echo "  make db-stop   stop the dev database"
 	@echo "  make run       API + built web UI on http://localhost:$(WEB_PORT) (production mode)"
@@ -176,7 +176,7 @@ release: install
 	@cp -R frontend/dist backend/internal/web/dist
 	@mkdir -p $(RELEASE_DIR)
 	@cd backend && go build -trimpath -tags embed \
-		-ldflags "-s -w" -o ../$(RELEASE_DIR)/lanvory ./cmd/server
-	@echo "✔ standalone binary: $(RELEASE_DIR)/lanvory (UI embedded; configure via lanvory.toml or LV_* env)"
+		-ldflags "-s -w" -o ../$(RELEASE_DIR)/labvory ./cmd/server
+	@echo "✔ standalone binary: $(RELEASE_DIR)/labvory (UI embedded; configure via labvory.toml or LV_* env)"
 
 .PHONY: help db db-stop demo demo-stop install backend web run dev build test secret-key release

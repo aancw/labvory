@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/aancw/lanvory/internal/httpx"
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/httpx"
+	"github.com/aancw/labvory/internal/store"
 )
 
 // writeCSV sets the download headers and hands back a writer that flushes
@@ -49,7 +49,7 @@ func (s *Server) handleExportAssetsCSV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	wr := writeCSV(w, r, "lanvory-assets.csv")
+	wr := writeCSV(w, r, "labvory-assets.csv")
 	header := []string{"id", "name", "hostname", "type", "category", "status", "lifecycle",
 		"environment", "location", "parent", "manufacturer", "model", "serial_number",
 		"os", "os_version", "cpu_model", "cpu_cores", "ram_gb", "storage_gb",
@@ -83,7 +83,7 @@ func (s *Server) handleExportIPsCSV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	wr := writeCSV(w, r, "lanvory-ip-addresses.csv")
+	wr := writeCSV(w, r, "labvory-ip-addresses.csv")
 	header := []string{"address", "subnet_cidr", "status", "assignment_method",
 		"hostname", "asset_name", "last_observed_at", "observed_conflict"}
 	if err := wr.Write(header); err != nil {

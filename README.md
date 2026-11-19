@@ -1,10 +1,10 @@
-# Lanvory
+# LabVory
 
 **A self-hosted inventory for your homelab.** Track physical devices, virtual machines, containers, networks, IP addresses, and the services that run on them.
 
-Lanvory replaces scattered spreadsheets and notes. It runs locally as a Go API, a React web app, and PostgreSQL. No cloud account is required.
+LabVory replaces scattered spreadsheets and notes. It runs locally as a Go API, a React web app, and PostgreSQL. No cloud account is required.
 
-![Lanvory dashboard showing homelab inventory and network status](docs/img/screenshot.png)
+![LabVory dashboard showing homelab inventory and network status](docs/img/screenshot.png)
 
 ## Features
 
@@ -21,17 +21,17 @@ Lanvory replaces scattered spreadsheets and notes. It runs locally as a Go API, 
 
 ## Install a standalone binary
 
-Release builds embed the web UI in a single Go binary — PostgreSQL is the only external dependency. Download the archive for your platform from [GitHub Releases](https://github.com/aancw/lanvory/releases), then:
+Release builds embed the web UI in a single Go binary — PostgreSQL is the only external dependency. Download the archive for your platform from [GitHub Releases](https://github.com/aancw/labvory/releases), then:
 
 ```bash
-tar xzf lanvory_<version>_linux_amd64.tar.gz
-cp lanvory.toml.example lanvory.toml        # then edit database_url + secret_key
-./lanvory                                   # or: ./lanvory -config /etc/lanvory/lanvory.toml
+tar xzf labvory_<version>_linux_amd64.tar.gz
+cp labvory.toml.example labvory.toml        # then edit database_url + secret_key
+./labvory                                   # or: ./labvory -config /etc/labvory/labvory.toml
 ```
 
-The binary reads `./lanvory.toml` or the file given with `-config`; `LV_*` environment variables still work and win over the file. Migrations run automatically on first boot, and the web UI, API, and `/mcp` are all served from one port (default `:8090`, override with `addr`). Set `secret_key` (see `make secret-key`) to enable integration secrets and two-factor authentication. `./lanvory -version` prints the release version.
+The binary reads `./labvory.toml` or the file given with `-config`; `LV_*` environment variables still work and win over the file. Migrations run automatically on first boot, and the web UI, API, and `/mcp` are all served from one port (default `:8090`, override with `addr`). Set `secret_key` (see `make secret-key`) to enable integration secrets and two-factor authentication. `./labvory -version` prints the release version.
 
-For ARP scans and ICMP checks on Linux, grant the binary raw-socket access once: `sudo setcap cap_net_raw+ep ./lanvory` (on macOS, run with `sudo` for ARP). See [LAN discovery](#lan-discovery) for the Docker alternative.
+For ARP scans and ICMP checks on Linux, grant the binary raw-socket access once: `sudo setcap cap_net_raw+ep ./labvory` (on macOS, run with `sudo` for ARP). See [LAN discovery](#lan-discovery) for the Docker alternative.
 
 ## Run with Docker Compose
 
@@ -51,7 +51,7 @@ Open **http://localhost:8088** and follow the administrator setup wizard. To con
 | Web app | `http://localhost:8088` | Recommended; includes the `/api` proxy |
 | API | `http://localhost:8080/api/v1/...` | Direct access for scripts and clients |
 
-For use on a trusted home LAN, the default HTTP setup is sufficient. For access beyond your LAN, put Lanvory behind a TLS-terminating reverse proxy and set `LV_COOKIE_SECURE=true`.
+For use on a trusted home LAN, the default HTTP setup is sufficient. For access beyond your LAN, put LabVory behind a TLS-terminating reverse proxy and set `LV_COOKIE_SECURE=true`.
 
 ### LAN discovery
 
@@ -80,5 +80,5 @@ This starts PostgreSQL, the API on port `8090`, and the Vite development server 
 
 - PostgreSQL is only reachable on the internal Compose network.
 - Enable `LV_COOKIE_SECURE=true` when serving over HTTPS.
-- Integration secrets are encrypted at rest and are never returned by the API. Do not store service credentials in Lanvory's inventory fields.
+- Integration secrets are encrypted at rest and are never returned by the API. Do not store service credentials in LabVory's inventory fields.
 - Login and setup endpoints are rate-limited, and security-relevant changes are recorded in the audit log.

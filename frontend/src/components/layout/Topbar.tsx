@@ -52,7 +52,7 @@ export function Topbar() {
         size="icon"
         className="lg:hidden"
         aria-label="Open navigation"
-        onClick={() => window.dispatchEvent(new CustomEvent("lanvory:toggle-sidebar"))}
+        onClick={() => window.dispatchEvent(new CustomEvent("labvory:toggle-sidebar"))}
       >
         <MenuIcon className="size-4" />
       </Button>
@@ -145,8 +145,8 @@ export function AppShell() {
 
   useEffect(() => {
     const toggle = () => setMobileOpen((v) => !v)
-    window.addEventListener("lanvory:toggle-sidebar", toggle)
-    return () => window.removeEventListener("lanvory:toggle-sidebar", toggle)
+    window.addEventListener("labvory:toggle-sidebar", toggle)
+    return () => window.removeEventListener("labvory:toggle-sidebar", toggle)
   }, [])
 
   return (

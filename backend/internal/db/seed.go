@@ -525,7 +525,7 @@ func SeedDevHomelab(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger
 	}
 	seedIntegrations := []seedIntegration{
 		{kind: "proxmox", name: "pve-01", description: "Demo placeholder — fill in the API token secret before enabling.",
-			config: map[string]any{"endpoint": "https://pve-01.lab:8006", "token_id": "lanvory@pve!read", "verify_tls": false}},
+			config: map[string]any{"endpoint": "https://pve-01.lab:8006", "token_id": "labvory@pve!read", "verify_tls": false}},
 		{kind: "docker", name: "docker-host", description: "Demo placeholder — pointing at the seeded docker host.",
 			config: map[string]any{"host": "unix:///var/run/docker.sock", "asset_id": ids["docker-host"]}},
 		{kind: "icmp", name: "core reachability", description: "Demo placeholder — ICMP reachability for core devices.",

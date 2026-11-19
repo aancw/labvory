@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aancw/lanvory/internal/httpx"
-	"github.com/aancw/lanvory/internal/notify"
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/httpx"
+	"github.com/aancw/labvory/internal/notify"
+	"github.com/aancw/labvory/internal/store"
 )
 
 // ---------- Settings ----------
@@ -106,8 +106,8 @@ func (s *Server) handleTestNotification(w http.ResponseWriter, r *http.Request) 
 			"No webhook URL configured — set it first.", nil)
 		return
 	}
-	if err := notify.Post(r.Context(), url, "Lanvory test notification",
-		"If you can read this, webhook notifications from Lanvory are working."); err != nil {
+	if err := notify.Post(r.Context(), url, "LabVory test notification",
+		"If you can read this, webhook notifications from LabVory are working."); err != nil {
 		httpx.Error(w, r, http.StatusBadGateway, "webhook_failed",
 			"Webhook delivery failed: "+err.Error(), nil)
 		return

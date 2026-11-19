@@ -1,4 +1,4 @@
-// Command server runs the Lanvory API.
+// Command server runs the LabVory API.
 package main
 
 import (
@@ -12,12 +12,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aancw/lanvory/internal/api"
-	"github.com/aancw/lanvory/internal/auth"
-	"github.com/aancw/lanvory/internal/config"
-	"github.com/aancw/lanvory/internal/db"
-	"github.com/aancw/lanvory/internal/secrets"
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/api"
+	"github.com/aancw/labvory/internal/auth"
+	"github.com/aancw/labvory/internal/config"
+	"github.com/aancw/labvory/internal/db"
+	"github.com/aancw/labvory/internal/secrets"
+	"github.com/aancw/labvory/internal/store"
 )
 
 func main() {
@@ -34,7 +34,7 @@ func main() {
 
 	// Load resolves built-in defaults, the TOML config file, and LV_*
 	// environment variables (environment wins). An explicitly named file
-	// must exist; the default ./lanvory.toml is used only when present.
+	// must exist; the default ./labvory.toml is used only when present.
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "config: %v\n", err)
@@ -115,7 +115,7 @@ func main() {
 
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("lanvory api listening", "addr", cfg.Addr, "env", cfg.Env, "version", api.Version)
+		logger.Info("labvory api listening", "addr", cfg.Addr, "env", cfg.Env, "version", api.Version)
 		errCh <- srv.ListenAndServe()
 	}()
 

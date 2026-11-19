@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/aancw/lanvory/internal/httpx"
+	"github.com/aancw/labvory/internal/httpx"
 )
 
 // ---------- export ----------
@@ -18,7 +18,7 @@ func (s *Server) handleExportInventory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="lanvory-inventory.json"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="labvory-inventory.json"`)
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(doc)

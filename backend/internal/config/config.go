@@ -1,5 +1,5 @@
-// Package config loads Lanvory configuration: a TOML file for the standalone
-// binary (lanvory.toml, see deploy/lanvory.toml.example) and LV_* environment
+// Package config loads LabVory configuration: a TOML file for the standalone
+// binary (labvory.toml, see deploy/labvory.toml.example) and LV_* environment
 // variables — the latter win when both define a setting. Docker deployments
 // keep using environment variables alone.
 package config
@@ -19,7 +19,7 @@ import (
 
 // DefaultConfigFile is the TOML file the standalone binary reads when started
 // without -config, if it exists in the working directory.
-const DefaultConfigFile = "lanvory.toml"
+const DefaultConfigFile = "labvory.toml"
 
 // Config is the resolved runtime configuration.
 type Config struct {
@@ -53,7 +53,7 @@ type fileConfig struct {
 
 // Load resolves configuration with precedence: environment variables over
 // the TOML config file over built-in defaults. A non-empty configPath must
-// exist; the empty path falls back to ./lanvory.toml when present. Unknown
+// exist; the empty path falls back to ./labvory.toml when present. Unknown
 // keys in the file are errors — typos must not silently disable a setting.
 func Load(configPath string) (Config, error) {
 	explicit := configPath != ""
@@ -151,7 +151,7 @@ func resolveDatabaseURL(fileVal *string) string {
 	if fileVal != nil {
 		return *fileVal
 	}
-	return "postgres://lanvory:lanvory@localhost:5432/lanvory?sslmode=disable"
+	return "postgres://labvory:labvory@localhost:5432/labvory?sslmode=disable"
 }
 
 // resolveBool treats a missing environment variable as unset so the file can

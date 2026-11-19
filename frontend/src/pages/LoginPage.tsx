@@ -155,7 +155,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
         <div className="mb-6 flex items-center justify-center gap-2.5">
           <LogoMark className="size-9 rounded-lg" />
           <div className="leading-tight">
-            <p className="text-lg font-semibold tracking-tight">Lanvory</p>
+            <p className="text-lg font-semibold tracking-tight">LabVory</p>
             <p className="text-xs text-muted-foreground">Homelab Infrastructure Manager</p>
           </div>
         </div>

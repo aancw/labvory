@@ -1,19 +1,19 @@
-# Lanvory — reproducible self-hosted deployment.
+# LabVory — reproducible self-hosted deployment.
 # Copy .env.example to .env and review values before first start.
-name: lanvory
+name: labvory
 
 services:
   db:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${LV_DB_USER:-lanvory}
-      POSTGRES_PASSWORD: ${LV_DB_PASSWORD:-lanvory}
-      POSTGRES_DB: ${LV_DB_NAME:-lanvory}
+      POSTGRES_USER: ${LV_DB_USER:-labvory}
+      POSTGRES_PASSWORD: ${LV_DB_PASSWORD:-labvory}
+      POSTGRES_DB: ${LV_DB_NAME:-labvory}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${LV_DB_USER:-lanvory} -d ${LV_DB_NAME:-lanvory}"]
+      test: ["CMD-SHELL", "pg_isready -U ${LV_DB_USER:-labvory} -d ${LV_DB_NAME:-labvory}"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -27,7 +27,7 @@ services:
     cap_add:
       - NET_RAW
     environment:
-      LV_DATABASE_URL: postgres://${LV_DB_USER:-lanvory}:${LV_DB_PASSWORD:-lanvory}@db:5432/${LV_DB_NAME:-lanvory}?sslmode=disable
+      LV_DATABASE_URL: postgres://${LV_DB_USER:-labvory}:${LV_DB_PASSWORD:-labvory}@db:5432/${LV_DB_NAME:-labvory}?sslmode=disable
       LV_ADDR: "0.0.0.0:8080"
       LV_ENV: production
       LV_COOKIE_SECURE: ${LV_COOKIE_SECURE:-false}

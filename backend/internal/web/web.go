@@ -72,11 +72,11 @@ const fallbackHTML = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lanvory</title>
+<title>LabVory</title>
 <style>body{font-family:system-ui,sans-serif;max-width:36rem;margin:8rem auto;padding:0 1rem;color:#374151;line-height:1.6}code{background:#f3f4f6;padding:.15rem .35rem;border-radius:.25rem}</style>
 </head>
 <body>
-<h1>Lanvory API is running</h1>
+<h1>LabVory API is running</h1>
 <p>This binary was built without the web UI embedded. Options:</p>
 <ul>
 <li>Run the frontend separately: <code>make dev</code> (Vite on :5173)</li>

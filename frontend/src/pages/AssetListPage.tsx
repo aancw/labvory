@@ -131,7 +131,7 @@ export function AssetListPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
   // Configurable columns (persisted locally).
-  const COLUMN_STORAGE = "lanvory-asset-columns"
+  const COLUMN_STORAGE = "labvory-asset-columns"
   const [columns, setColumns] = useState<Record<string, boolean>>(() => {
     try {
       const stored = localStorage.getItem(COLUMN_STORAGE)
@@ -150,7 +150,7 @@ export function AssetListPage() {
   }
 
   // Saved views (filters per page variant, persisted locally).
-  const VIEW_STORAGE = `lanvory-views${pathname}`
+  const VIEW_STORAGE = `labvory-views${pathname}`
   const [views, setViews] = useState<Record<string, string>>(() => {
     try {
       return JSON.parse(localStorage.getItem(VIEW_STORAGE) ?? "{}") as Record<string, string>

@@ -11,7 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/aancw/lanvory/internal/db"
+	"github.com/aancw/labvory/internal/db"
 )
 
 // newTestPool migrates the shared test database (migrations are idempotent)

@@ -12,8 +12,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/aancw/lanvory/internal/mcp"
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/mcp"
+	"github.com/aancw/labvory/internal/store"
 )
 
 // MCP tool surface. Tools reuse the existing REST handlers in-process: each
@@ -234,7 +234,7 @@ func (s *Server) mcpRouter() http.Handler {
 	m := chi.NewRouter()
 	m.Use(s.bearerAuth)
 	m.Handle("/", &mcp.Handler{
-		ServerName: "lanvory",
+		ServerName: "labvory",
 		Version:    "1.0.0",
 		ListTools:  func() []mcp.Tool { return mcpToolList },
 		Call:       s.callMCPTool,

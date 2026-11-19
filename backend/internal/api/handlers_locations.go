@@ -7,8 +7,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/aancw/lanvory/internal/httpx"
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/httpx"
+	"github.com/aancw/labvory/internal/store"
 )
 
 // ---------- locations ----------

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aancw/lanvory/internal/integrations"
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/integrations"
+	"github.com/aancw/labvory/internal/store"
 )
 
 // TestCloudflareSync runs the connector against a fake Cloudflare API and

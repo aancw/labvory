@@ -16,7 +16,7 @@ let csrfToken: string | null = null
 
 /** Fired when the server reports the session itself is unusable (expired,
  *  revoked, or the session store failed) so the UI can force a re-login. */
-export const SESSION_INVALID_EVENT = "lanvory:session-invalid"
+export const SESSION_INVALID_EVENT = "labvory:session-invalid"
 
 /** True when an error means "this session cannot be used anymore". */
 export function isSessionInvalid(error: unknown): boolean {

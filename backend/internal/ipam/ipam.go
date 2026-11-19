@@ -1,4 +1,4 @@
-// Package ipam implements pure subnet/address math for Lanvory.
+// Package ipam implements pure subnet/address math for LabVory.
 // All functions are side-effect free so they can be exhaustively unit-tested;
 // the database layer composes them with transactions.
 package ipam

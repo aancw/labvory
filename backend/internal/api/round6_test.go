@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aancw/lanvory/internal/auth"
+	"github.com/aancw/labvory/internal/auth"
 )
 
 // TestEndpointMaintenance covers the planned maintenance window: declaring a

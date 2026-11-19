@@ -12,7 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/store"
 )
 
 // SyncCloudflare imports the account's zones as domains and syncs each zone's

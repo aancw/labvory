@@ -173,7 +173,7 @@ export function ImportExportPage() {
       const res = await fetch("/api/v1/export/inventory.json", { credentials: "include" })
       if (!res.ok) throw new Error(String(res.status))
       const blob = await res.blob()
-      triggerDownload(blob, "lanvory-inventory.json")
+      triggerDownload(blob, "labvory-inventory.json")
       toast.success("Inventory exported.")
     } catch {
       toast.error("Export failed.")
@@ -188,7 +188,7 @@ export function ImportExportPage() {
         const path = e === "assets" ? "/api/v1/export/assets.csv" : "/api/v1/export/ip-addresses.csv"
         const res = await fetch(path, { credentials: "include" })
         if (!res.ok) throw new Error(String(res.status))
-        triggerDownload(await res.blob(), e === "assets" ? "lanvory-assets.csv" : "lanvory-ip-addresses.csv")
+        triggerDownload(await res.blob(), e === "assets" ? "labvory-assets.csv" : "labvory-ip-addresses.csv")
         toast.success("Exported — the download has every tracked row.")
       } catch {
         toast.error("Export failed.")
@@ -204,7 +204,7 @@ export function ImportExportPage() {
     for (const r of rows) {
       lines.push(fields.map((f) => csvEscape(String(r[f] ?? ""))).join(","))
     }
-    triggerDownload(new Blob([lines.join("\n")], { type: "text/csv" }), `lanvory-${e}.csv`)
+    triggerDownload(new Blob([lines.join("\n")], { type: "text/csv" }), `labvory-${e}.csv`)
     toast.success(`Exported ${rows.length} row(s).`)
   }
 
@@ -254,7 +254,7 @@ export function ImportExportPage() {
           <CardHeader><CardTitle className="text-sm">Restore from JSON</CardTitle></CardHeader>
           <CardContent>
             <p className="mb-3 text-sm text-muted-foreground">
-              Re-imports a Lanvory inventory export. Existing entities (matched by natural keys) are never overwritten.
+              Re-imports a LabVory inventory export. Existing entities (matched by natural keys) are never overwritten.
             </p>
             <input
               ref={restoreRef}

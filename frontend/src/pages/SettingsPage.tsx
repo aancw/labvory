@@ -1066,7 +1066,7 @@ function ApiTokensCard() {
   const mcpConfig = JSON.stringify(
     {
       mcpServers: {
-        lanvory: {
+        labvory: {
           type: "http",
           url: `${origin}/mcp`,
           headers: { Authorization: "Bearer lv_<your-token>" },

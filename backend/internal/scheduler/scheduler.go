@@ -1,4 +1,4 @@
-// Package scheduler runs the periodic background work Lanvory performs on
+// Package scheduler runs the periodic background work LabVory performs on
 // its own: integration syncs that are due (per-connector auto-sync interval)
 // and, later, service-endpoint health checks. Everything runs on one loop —
 // homelab scale means sequential execution is plenty and can never overlap.
@@ -19,9 +19,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/aancw/lanvory/internal/integrations"
-	"github.com/aancw/lanvory/internal/notify"
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/integrations"
+	"github.com/aancw/labvory/internal/notify"
+	"github.com/aancw/labvory/internal/store"
 )
 
 const (
@@ -315,7 +315,7 @@ func probeHTTP(ctx context.Context, client *http.Client, url string) (statusCode
 	if err != nil {
 		return 0, 0, err.Error(), nil
 	}
-	req.Header.Set("User-Agent", "lanvory-health-check")
+	req.Header.Set("User-Agent", "labvory-health-check")
 	resp, err := client.Do(req)
 	latencyMS = int(time.Since(start).Milliseconds())
 	if err != nil {
@@ -390,7 +390,7 @@ func (s *Scheduler) recordAudit(ctx context.Context, entityType, entityID, entit
 
 // backupFilePrefix is the filename pattern of the JSON snapshots the backup
 // job writes; pruning sorts by name, so the embedded timestamp is the order.
-const backupFilePrefix = "lanvory-inventory-"
+const backupFilePrefix = "labvory-inventory-"
 
 // runDueBackups writes a full inventory JSON snapshot when the configured
 // interval has elapsed. Each run — success or failure — is audited, and a
@@ -415,7 +415,7 @@ func (s *Scheduler) runDueBackups(ctx context.Context, cfg schedSettings) {
 		s.logger.Error("scheduler: inventory backup failed", "error", err)
 		s.recordAudit(book, "settings", "", "inventory backup", "backup_failed",
 			map[string]any{"error": err.Error(), "dir": cfg.backup.dir})
-		s.notify(book, cfg.webhookURL, "Lanvory inventory backup failed", err.Error())
+		s.notify(book, cfg.webhookURL, "LabVory inventory backup failed", err.Error())
 		return
 	}
 	s.recordAudit(book, "settings", "", "inventory backup", "backup_completed",

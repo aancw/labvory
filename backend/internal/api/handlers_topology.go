@@ -3,8 +3,8 @@ package api
 import (
 	"net/http"
 
-	"github.com/aancw/lanvory/internal/httpx"
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/httpx"
+	"github.com/aancw/labvory/internal/store"
 )
 
 // TopologyGraph is the React Flow data source: every asset as a node, every

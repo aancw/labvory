@@ -3,8 +3,8 @@ node_modules/
 frontend/dist/
 
 # Builds
-backend/lanvory
-lanvory-server
+backend/labvory
+labvory-server
 dist-release/
 backend/internal/web/dist/
 *.log

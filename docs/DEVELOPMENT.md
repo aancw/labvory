@@ -15,8 +15,8 @@ both processes on Ctrl+C. `make run` does the same against a production build.
 1. **Database** — start a dev PostgreSQL:
 
    ```bash
-   docker run -d --name lanvory-pg \
-     -e POSTGRES_USER=lanvory -e POSTGRES_PASSWORD=lanvory -e POSTGRES_DB=lanvory \
+   docker run -d --name labvory-pg \
+     -e POSTGRES_USER=labvory -e POSTGRES_PASSWORD=labvory -e POSTGRES_DB=labvory \
      -p 5432:5432 postgres:17-alpine
    ```
 
@@ -27,7 +27,7 @@ both processes on Ctrl+C. `make run` does the same against a production build.
    LV_ENV=development go run ./cmd/server
    ```
 
-   The default `LV_DATABASE_URL` is `postgres://lanvory:lanvory@localhost:5432/lanvory?sslmode=disable`
+   The default `LV_DATABASE_URL` is `postgres://labvory:labvory@localhost:5432/labvory?sslmode=disable`
    (override with `LV_DATABASE_URL` or `DATABASE_URL`). The API defaults to `:8090` (8080 often
    collides with other local tools). Taken? Use another `LV_ADDR` and set `LV_API_TARGET` for the
    frontend proxy (step 3).
@@ -50,9 +50,9 @@ The standalone binary embeds the built SPA with `go:embed` (`backend/internal/we
 
 - Plain builds (`go build ./...`, tests) carry no assets and serve a fallback page — the embed tag is never required for development.
 - `make release` builds the UI, copies `frontend/dist` to `backend/internal/web/dist` (gitignored), and produces the standalone binary in `dist-release/`.
-- Configuration: `./lanvory.toml` (or `-config <path>`, TOML, unknown keys rejected — see `deploy/lanvory.toml.example`), with `LV_*` environment variables winning over the file. Docker deployments use environment variables alone.
-- Pushing a `v*` tag runs [.github/workflows/release.yml](../.github/workflows/release.yml), which builds the same binary for linux/darwin × amd64/arm64 and publishes archives (binary + LICENSE + `lanvory.toml.example`) + checksums to GitHub Releases.
-- `api.Version` is stamped via `-ldflags -X github.com/aancw/lanvory/internal/api.Version=<tag>`; locally it reports `dev`.
+- Configuration: `./labvory.toml` (or `-config <path>`, TOML, unknown keys rejected — see `deploy/labvory.toml.example`), with `LV_*` environment variables winning over the file. Docker deployments use environment variables alone.
+- Pushing a `v*` tag runs [.github/workflows/release.yml](../.github/workflows/release.yml), which builds the same binary for linux/darwin × amd64/arm64 and publishes archives (binary + LICENSE + `labvory.toml.example`) + checksums to GitHub Releases.
+- `api.Version` is stamped via `-ldflags -X github.com/aancw/labvory/internal/api.Version=<tag>`; locally it reports `dev`.
 
 ## Tests
 
@@ -62,7 +62,7 @@ cd backend
 go build ./... && go vet ./... && go test ./...
 
 # API integration test (end-to-end workflow against real PostgreSQL)
-docker run -d --name lanvory-test-pg \
+docker run -d --name labvory-test-pg \
   -e POSTGRES_USER=gwtest -e POSTGRES_PASSWORD=gwtest -e POSTGRES_DB=gwtest \
   -p 55432:5432 postgres:17-alpine
 TEST_DATABASE_URL="postgres://gwtest:gwtest@localhost:55432/gwtest?sslmode=disable" \

@@ -10,7 +10,7 @@ import (
 
 func TestLoadFromFile(t *testing.T) {
 	t.Run("file provides values", func(t *testing.T) {
-		path := writeTemp(t, "lanvory.toml", strings.Join([]string{
+		path := writeTemp(t, "labvory.toml", strings.Join([]string{
 			`addr = ":9100"`,
 			`database_url = "postgres://file:file@localhost:9100/file?sslmode=disable"`,
 			`secret_key = "abc123"`,
@@ -43,7 +43,7 @@ func TestLoadFromFile(t *testing.T) {
 
 	t.Run("environment wins over file", func(t *testing.T) {
 		t.Setenv("LV_ADDR", ":9200")
-		path := writeTemp(t, "lanvory.toml", "addr = \":9101\"\n")
+		path := writeTemp(t, "labvory.toml", "addr = \":9101\"\n")
 		cfg, err := Load(path)
 		if err != nil {
 			t.Fatal(err)
@@ -55,7 +55,7 @@ func TestLoadFromFile(t *testing.T) {
 
 	t.Run("DATABASE_URL spelling works", func(t *testing.T) {
 		t.Setenv("DATABASE_URL", "postgres://spelled@localhost/x")
-		path := writeTemp(t, "lanvory.toml", `database_url = "postgres://file@localhost/y"`+"\n")
+		path := writeTemp(t, "labvory.toml", `database_url = "postgres://file@localhost/y"`+"\n")
 		cfg, err := Load(path)
 		if err != nil {
 			t.Fatal(err)
@@ -67,7 +67,7 @@ func TestLoadFromFile(t *testing.T) {
 
 	t.Run("absent default file yields defaults", func(t *testing.T) {
 		dir := t.TempDir()
-		t.Chdir(dir) // no lanvory.toml here
+		t.Chdir(dir) // no labvory.toml here
 		cfg, err := Load("")
 		if err != nil {
 			t.Fatal(err)
@@ -88,7 +88,7 @@ func TestLoadFromFile(t *testing.T) {
 	})
 
 	t.Run("unknown keys are errors", func(t *testing.T) {
-		path := writeTemp(t, "lanvory.toml", "databse_url = \"typo\"\n")
+		path := writeTemp(t, "labvory.toml", "databse_url = \"typo\"\n")
 		_, err := Load(path)
 		if err == nil || !strings.Contains(err.Error(), "databse_url") {
 			t.Errorf("err = %v, want unknown-key error naming the typo", err)
@@ -96,7 +96,7 @@ func TestLoadFromFile(t *testing.T) {
 	})
 
 	t.Run("invalid session_ttl is an error", func(t *testing.T) {
-		path := writeTemp(t, "lanvory.toml", "session_ttl = \"forever\"\n")
+		path := writeTemp(t, "labvory.toml", "session_ttl = \"forever\"\n")
 		_, err := Load(path)
 		if err == nil || !strings.Contains(err.Error(), "session_ttl") {
 			t.Errorf("err = %v, want session_ttl parse error", err)
@@ -104,7 +104,7 @@ func TestLoadFromFile(t *testing.T) {
 	})
 
 	t.Run("malformed TOML is an error", func(t *testing.T) {
-		path := writeTemp(t, "lanvory.toml", "addr = \n")
+		path := writeTemp(t, "labvory.toml", "addr = \n")
 		_, err := Load(path)
 		if err == nil {
 			t.Error("want parse error for malformed TOML")

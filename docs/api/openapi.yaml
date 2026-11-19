@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
-  title: Lanvory API
+  title: LabVory API
   version: 1.0.0
   description: |
-    REST API for the Lanvory homelab infrastructure manager (all six phases).
+    REST API for the LabVory homelab infrastructure manager (all six phases).
 
     Auth uses an HttpOnly session cookie (`lv_session`). All unsafe methods require the
     double-submit CSRF header `X-CSRF-Token` matching the `lv_csrf` cookie (GET /api/v1/csrf).

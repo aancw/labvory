@@ -1,6 +1,6 @@
-# Lanvory — Architecture
+# LabVory — Architecture
 
-Lanvory is a self-hosted homelab infrastructure & asset management platform: a single source
+LabVory is a self-hosted homelab infrastructure & asset management platform: a single source
 of truth for physical devices, virtual machines, containers, networks, IP allocations, and services.
 
 Design intent: the data model discipline of NetBox, the asset-inventory ergonomics of Snipe-IT,
@@ -35,8 +35,8 @@ stateful dependency. No message queue, no cache tier, no external SaaS.
 ### Repository layout
 
 ```
-lanvory/
-├── backend/                  Go API (module github.com/aancw/lanvory)
+labvory/
+├── backend/                  Go API (module github.com/aancw/labvory)
 │   ├── cmd/server/           entrypoint
 │   ├── internal/
 │   │   ├── api/              chi routes + HTTP handlers (transport layer)
@@ -312,7 +312,7 @@ erDiagram
 
 ## 3. Backend design
 
-- **Go 1.27**, module `github.com/aancw/lanvory`.
+- **Go 1.27**, module `github.com/aancw/labvory`.
 - **chi** router; layered: `api` (transport) → `auth`/`audit`/future services → `store` (SQL).
 - **pgx v5** with `pgxpool`; statements are always parameterized.
 - **golang-migrate** with migrations embedded from `internal/db/migrations/*.sql`.

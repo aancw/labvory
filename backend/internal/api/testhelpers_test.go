@@ -9,7 +9,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/store"
 )
 
 var testDBURLFromEnv = os.Getenv("TEST_DATABASE_URL")

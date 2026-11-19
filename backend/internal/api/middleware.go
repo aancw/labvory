@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aancw/lanvory/internal/httpx"
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/httpx"
+	"github.com/aancw/labvory/internal/store"
 )
 
 type ctxKey string

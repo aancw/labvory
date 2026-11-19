@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/store"
 )
 
 func TestDue(t *testing.T) {

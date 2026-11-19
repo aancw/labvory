@@ -1,4 +1,4 @@
-module github.com/aancw/lanvory
+module github.com/aancw/labvory
 
 go 1.27
 

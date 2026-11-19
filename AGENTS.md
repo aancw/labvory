@@ -4,7 +4,7 @@ Guidance for AI agents working in this repository. Orientation lives in [README.
 design and ERD in [ARCHITECTURE.md](ARCHITECTURE.md), setup and test workflow in
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md), API contract in [docs/api/openapi.yaml](docs/api/openapi.yaml).
 
-Lanvory is a self-hosted homelab inventory: Go (chi + pgx) backend, React SPA (Vite + TanStack
+LabVory is a self-hosted homelab inventory: Go (chi + pgx) backend, React SPA (Vite + TanStack
 Query), PostgreSQL as the only state.
 
 ## Invariants

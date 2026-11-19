@@ -12,14 +12,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/aancw/lanvory/internal/auth"
-	"github.com/aancw/lanvory/internal/config"
-	"github.com/aancw/lanvory/internal/httpx"
-	"github.com/aancw/lanvory/internal/integrations"
-	"github.com/aancw/lanvory/internal/scheduler"
-	"github.com/aancw/lanvory/internal/secrets"
-	"github.com/aancw/lanvory/internal/store"
-	"github.com/aancw/lanvory/internal/web"
+	"github.com/aancw/labvory/internal/auth"
+	"github.com/aancw/labvory/internal/config"
+	"github.com/aancw/labvory/internal/httpx"
+	"github.com/aancw/labvory/internal/integrations"
+	"github.com/aancw/labvory/internal/scheduler"
+	"github.com/aancw/labvory/internal/secrets"
+	"github.com/aancw/labvory/internal/store"
+	"github.com/aancw/labvory/internal/web"
 )
 
 // Version is stamped by release builds via -ldflags -X; "dev" otherwise.

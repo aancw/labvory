@@ -25,4 +25,4 @@ INSERT INTO network_contexts (name, slug, description) VALUES
     ('Default', 'default', 'Main routed network context');
 
 INSERT INTO app_settings (key, value) VALUES
-    ('instance.name', '"Lanvory"');
+    ('instance.name', '"LabVory"');

@@ -147,7 +147,7 @@ export function ActivityPage() {
         <EmptyState
           icon={ScrollTextIcon}
           title="No activity yet"
-          description="Sign-ins, settings changes, and edits across the inventory will appear here as you use Lanvory."
+          description="Sign-ins, settings changes, and edits across the inventory will appear here as you use LabVory."
         />
       ) : (
         <>

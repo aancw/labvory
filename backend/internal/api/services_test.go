@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/store"
 )
 
 // TestServiceWorkflow covers Phase 4: service CRUD, endpoints, deployments, alerts.

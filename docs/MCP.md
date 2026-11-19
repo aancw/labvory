@@ -1,6 +1,6 @@
 # MCP Server — agent access to the inventory
 
-Lanvory ships a Model Context Protocol (MCP) server at `/mcp` (streamable HTTP
+LabVory ships a Model Context Protocol (MCP) server at `/mcp` (streamable HTTP
 transport, stateless mode) so agents and scripts can create, list and manage
 inventory data: assets, locations, subnets, IP allocations, VLANs, network
 contexts, services, interfaces, relationships and the DNS inventory (domains
@@ -56,7 +56,7 @@ custom agent runtimes):
 ```json
 {
   "mcpServers": {
-    "lanvory": {
+    "labvory": {
       "type": "http",
       "url": "http://localhost:8090/mcp",
       "headers": { "Authorization": "Bearer lv_<your-token>" }

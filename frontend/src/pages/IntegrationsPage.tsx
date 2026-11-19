@@ -676,7 +676,7 @@ function IntegrationDialog({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="int-token">API token ID *</Label>
-                <Input id="int-token" className="font-mono text-xs" placeholder="root@pam!lanvory"
+                <Input id="int-token" className="font-mono text-xs" placeholder="root@pam!labvory"
                   value={tokenId} onChange={(e) => setTokenId(e.target.value)} />
               </div>
               <div className="space-y-1.5">
@@ -815,7 +815,7 @@ function IntegrationDialog({
               </div>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={k8sInCluster} onChange={(e) => setK8sInCluster(e.target.checked)} className="size-4" />
-                Use the in-cluster service account (when Lanvory runs inside the cluster)
+                Use the in-cluster service account (when LabVory runs inside the cluster)
               </label>
             </>
           ) : null}

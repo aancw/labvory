@@ -15,10 +15,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/aancw/lanvory/internal/auth"
-	"github.com/aancw/lanvory/internal/config"
-	"github.com/aancw/lanvory/internal/db"
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/auth"
+	"github.com/aancw/labvory/internal/config"
+	"github.com/aancw/labvory/internal/db"
+	"github.com/aancw/labvory/internal/store"
 )
 
 func testLogger() *slog.Logger {
@@ -247,7 +247,7 @@ func truncateAll(t *testing.T, pool *pgxpool.Pool) {
 		t.Fatalf("reseed: %v", err)
 	}
 	_, err = pool.Exec(t.Context(), fmt.Sprintf(
-		`INSERT INTO app_settings (key, value) VALUES ('instance.name', '"Lanvory"') ON CONFLICT (key) DO NOTHING`))
+		`INSERT INTO app_settings (key, value) VALUES ('instance.name', '"LabVory"') ON CONFLICT (key) DO NOTHING`))
 	if err != nil {
 		t.Fatalf("reseed settings: %v", err)
 	}

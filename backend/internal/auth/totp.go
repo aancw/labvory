@@ -72,10 +72,10 @@ func ValidateTOTP(secret, code string, now time.Time) (int64, bool) {
 func OTPAuthURI(username, secret string) string {
 	q := url.Values{}
 	q.Set("secret", secret)
-	q.Set("issuer", "Lanvory")
+	q.Set("issuer", "LabVory")
 	q.Set("period", strconv.Itoa(totpPeriod))
 	q.Set("digits", strconv.Itoa(totpDigits))
-	return "otpauth://totp/" + url.PathEscape("Lanvory:"+username) + "?" + q.Encode()
+	return "otpauth://totp/" + url.PathEscape("LabVory:"+username) + "?" + q.Encode()
 }
 
 // hotpSHA1 implements the RFC 4226 HMAC-SHA1 HOTP algorithm with 6 digits.

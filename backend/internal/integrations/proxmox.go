@@ -15,7 +15,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/aancw/lanvory/internal/store"
+	"github.com/aancw/labvory/internal/store"
 )
 
 // ProxmoxClient talks to a Proxmox VE API with a read-only API token.
