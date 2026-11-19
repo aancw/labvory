@@ -97,7 +97,7 @@ func TestWriteBackupSnapshot(t *testing.T) {
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL not set")
 	}
-	s := New(newTestPool(t, databaseURL), nil, testLogger())
+	s := New(newTestPool(t, databaseURL), nil, testLogger(), nil)
 	dir := t.TempDir()
 
 	now := time.Now()

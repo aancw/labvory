@@ -22,6 +22,7 @@ import (
 	"github.com/aancw/labvory/internal/integrations"
 	"github.com/aancw/labvory/internal/notify"
 	"github.com/aancw/labvory/internal/store"
+	"github.com/aancw/labvory/internal/update"
 )
 
 const (
@@ -52,9 +53,10 @@ type backupSettings struct {
 // schedSettings is the per-tick snapshot of the instance settings the
 // scheduler acts on.
 type schedSettings struct {
-	webhookURL    string
-	retentionDays int
-	backup        backupSettings
+	webhookURL      string
+	retentionDays   int
+	notifiedVersion string // last release version already announced
+	backup          backupSettings
 }
 
 // Scheduler is the single background worker.
@@ -66,6 +68,7 @@ type Scheduler struct {
 	audit        *store.AuditEvents
 	importer     *store.Importer
 	runner       *integrations.Runner
+	updates      *update.Checker // nil when update checks are disabled
 	logger       *slog.Logger
 
 	lastChecksPrune time.Time
@@ -73,7 +76,7 @@ type Scheduler struct {
 	lastBackupAt    time.Time
 }
 
-func New(pool *pgxpool.Pool, runner *integrations.Runner, logger *slog.Logger) *Scheduler {
+func New(pool *pgxpool.Pool, runner *integrations.Runner, logger *slog.Logger, updates *update.Checker) *Scheduler {
 	return &Scheduler{
 		pool:         pool,
 		integrations: store.NewIntegrations(pool),
@@ -82,6 +85,7 @@ func New(pool *pgxpool.Pool, runner *integrations.Runner, logger *slog.Logger) *
 		audit:        store.NewAuditEvents(pool),
 		importer:     store.NewImporter(pool),
 		runner:       runner,
+		updates:      updates,
 		logger:       logger,
 	}
 }
@@ -107,6 +111,7 @@ func (s *Scheduler) tick(ctx context.Context) {
 	s.checkDueEndpoints(ctx, cfg.webhookURL)
 	s.pruneHistory(ctx, cfg.retentionDays)
 	s.runDueBackups(ctx, cfg)
+	s.checkForUpdate(ctx, cfg)
 }
 
 // loadSettings reads the settings the scheduler acts on once per tick.
@@ -123,6 +128,9 @@ func (s *Scheduler) loadSettings(ctx context.Context) schedSettings {
 	}
 	if raw := all["audit.retention_days"]; len(raw) > 0 {
 		_ = json.Unmarshal(raw, &cfg.retentionDays)
+	}
+	if raw := all["update.notified_version"]; len(raw) > 0 {
+		_ = json.Unmarshal(raw, &cfg.notifiedVersion)
 	}
 	cfg.backup = backupSettings{
 		enabled:       false,
@@ -383,6 +391,32 @@ func (s *Scheduler) recordAudit(ctx context.Context, entityType, entityID, entit
 	})
 	if err != nil {
 		s.logger.Error("scheduler: audit write failed", "error", err, "action", action)
+	}
+}
+
+// ---------- release update check ----------
+
+// checkForUpdate asks the checker for the latest GitHub release (throttled
+// internally to two lookups a day) and announces a newly available version
+// once: the announced version is persisted in app_settings so a restart does
+// not re-ping the webhook or duplicate the Activity entry.
+func (s *Scheduler) checkForUpdate(ctx context.Context, cfg schedSettings) {
+	if s.updates == nil {
+		return
+	}
+	state := s.updates.Check(ctx)
+	if !state.Available || state.Latest == "" || state.Latest == cfg.notifiedVersion {
+		return
+	}
+	s.recordAudit(ctx, "instance", "", "LabVory", "update_available", map[string]any{
+		"latest": state.Latest, "current": state.Current, "url": state.URL,
+	})
+	message := fmt.Sprintf("%s is available (running %s). Install from the dashboard: %s",
+		state.Latest, state.Current, state.URL)
+	s.notify(ctx, cfg.webhookURL, "LabVory update available", message)
+	if err := s.settings.Upsert(ctx, "update.notified_version",
+		json.RawMessage(fmt.Sprintf("%q", state.Latest)), ""); err != nil {
+		s.logger.Warn("scheduler: persist notified update version failed", "error", err)
 	}
 }
 

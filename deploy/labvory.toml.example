@@ -27,3 +27,8 @@ cookie_secure = false
 
 # Populate an EMPTY database with a sample homelab:
 # seed_mode = "dev"
+
+# Check GitHub Releases twice a day for a newer LabVory version and surface
+# it on the dashboard. Set false to keep the instance fully offline. The
+# admin-triggered in-UI update install needs this enabled too.
+# update_check = true

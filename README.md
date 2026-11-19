@@ -1,5 +1,7 @@
 # LabVory
 
+[![Release](https://img.shields.io/github/v/release/aancw/labvory)](https://github.com/aancw/labvory/releases)
+
 **A self-hosted inventory for your homelab.** Track physical devices, virtual machines, containers, networks, IP addresses, and the services that run on them.
 
 LabVory replaces scattered spreadsheets and notes. It runs locally as a Go API, a React web app, and PostgreSQL. No cloud account is required.
@@ -32,6 +34,10 @@ cp labvory.toml.example labvory.toml        # then edit database_url + secret_ke
 The binary reads `./labvory.toml` or the file given with `-config`; `LV_*` environment variables still work and win over the file. Migrations run automatically on first boot, and the web UI, API, and `/mcp` are all served from one port (default `:8090`, override with `addr`). Set `secret_key` (see `make secret-key`) to enable integration secrets and two-factor authentication. `./labvory -version` prints the release version.
 
 For ARP scans and ICMP checks on Linux, grant the binary raw-socket access once: `sudo setcap cap_net_raw+ep ./labvory` (on macOS, run with `sudo` for ARP). See [LAN discovery](#lan-discovery) for the Docker alternative.
+
+### Updating
+
+The binary checks [GitHub Releases](https://github.com/aancw/labvory/releases) twice a day (opt out with `update_check = false` in `labvory.toml` or `LV_UPDATE_CHECK=false`) and shows a banner on the dashboard when a newer version is out. Administrators can install it from that banner: LabVory downloads the archive for your platform, verifies its sha256 against `sha256sums.txt`, swaps the binary (keeping the previous one as `labvory.old`), and restarts itself. On Linux the `cap_net_raw` file capability is carried over to the new binary; your `labvory.toml` is never touched.
 
 ## Run with Docker Compose
 

@@ -1,6 +1,8 @@
+import { useState } from "react"
 import { Link } from "react-router-dom"
 import {
   ArrowRightIcon,
+  ArrowUpCircleIcon,
   BoxesIcon,
   ShieldAlertIcon,
   CircuitBoardIcon,
@@ -12,12 +14,15 @@ import {
   ScrollTextIcon,
   ShieldCheckIcon,
 } from "lucide-react"
+import { toast } from "sonner"
 
-import { useDashboard, useMe } from "@/api/hooks"
+import { isApiError } from "@/api/client"
+import { useDashboard, useInstallUpdate, useMe, useUpdateStatus } from "@/api/hooks"
 import type { DashboardStatsV2 } from "@/api/types"
 import { EmptyState } from "@/components/EmptyState"
 import { PageHeader } from "@/components/PageHeader"
 import { StatusBadge } from "@/components/StatusBadge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn, formatRelative } from "@/lib/utils"
@@ -47,6 +52,8 @@ export function DashboardPage() {
         title={`Welcome, ${displayName}`}
         description="Operational overview of your homelab infrastructure."
       />
+
+      <UpdateBanner />
 
       {isLoading || !data ? (
         <StatsSkeleton />
@@ -320,6 +327,60 @@ export function DashboardPage() {
         </>
       )}
     </>
+  )
+}
+
+// UpdateBanner surfaces a newer GitHub release. Administrators can install
+// it in place — the server swaps the binary and restarts, then we reload so
+// the banner clears against the new version.
+function UpdateBanner() {
+  const { data: me } = useMe()
+  const isAdmin = me?.user.role === "admin"
+  const { data: update } = useUpdateStatus()
+  const install = useInstallUpdate()
+  const [restarting, setRestarting] = useState(false)
+
+  if (!update?.available || !update.latest) return null
+
+  const installNow = () => {
+    install.mutate(undefined, {
+      onSuccess: () => {
+        setRestarting(true)
+        toast.success(`Updated to ${update.latest}. Reloading…`)
+        window.location.reload()
+      },
+      onError: (err) => {
+        toast.error(isApiError(err) ? err.message : "Could not install the update.")
+      },
+    })
+  }
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+      <ArrowUpCircleIcon className="size-5 shrink-0 text-amber-600" aria-hidden />
+      <p className="text-sm">
+        <span className="font-medium">LabVory {update.latest} is available</span>
+        <span className="text-muted-foreground"> — you are running {update.current}.</span>
+      </p>
+      <div className="ml-auto flex items-center gap-2">
+        {update.url && (
+          <Button variant="outline" size="sm" asChild>
+            <a href={update.url} target="_blank" rel="noreferrer">
+              Release notes
+            </a>
+          </Button>
+        )}
+        {isAdmin && (
+          <Button size="sm" onClick={installNow} disabled={install.isPending || restarting}>
+            {install.isPending
+              ? "Downloading and verifying…"
+              : restarting
+                ? "Restarting…"
+                : "Install update"}
+          </Button>
+        )}
+      </div>
+    </div>
   )
 }
 

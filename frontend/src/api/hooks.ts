@@ -45,6 +45,8 @@ import type {
   ImportSummary,
   Integration,
   RestoreSummary,
+  InstallUpdateResult,
+  UpdateStatus,
 } from "./types"
 
 // ---------- auth ----------
@@ -149,6 +151,41 @@ export function useDashboard() {
   return useQuery({
     queryKey: ["dashboard"],
     queryFn: () => api.get<DashboardStats>("/api/v1/dashboard"),
+  })
+}
+
+// ---------- release updates ----------
+
+export function useUpdateStatus() {
+  return useQuery({
+    queryKey: ["update"],
+    queryFn: () => api.get<UpdateStatus>("/api/v1/update"),
+    staleTime: 5 * 60_000,
+  })
+}
+
+// useInstallUpdate swaps in the newest release binary; the server restarts
+// itself right after responding. Poll /health until the running version
+// changes, then resolve so the caller can reload the page.
+export function useInstallUpdate() {
+  return useMutation({
+    mutationFn: () => api.post<InstallUpdateResult>("/api/v1/update/install"),
+    onSuccess: async (result) => {
+      const target = result.to
+      const started = Date.now()
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 2000))
+        try {
+          const health = await fetch("/api/v1/health").then((r) => r.json())
+          // The old binary may answer briefly before the restart lands, so
+          // wait until the running version IS the target one.
+          if (health.version === target) break
+        } catch {
+          // Server is restarting — keep waiting for it to come back.
+        }
+        if (Date.now() - started > 60_000) break
+      }
+    },
   })
 }
 

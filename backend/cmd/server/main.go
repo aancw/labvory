@@ -18,6 +18,7 @@ import (
 	"github.com/aancw/labvory/internal/db"
 	"github.com/aancw/labvory/internal/secrets"
 	"github.com/aancw/labvory/internal/store"
+	"github.com/aancw/labvory/internal/update"
 )
 
 func main() {
@@ -84,12 +85,6 @@ func main() {
 
 	apiSrv := api.NewServer(cfg, logger, pool, authSvc)
 
-	// Background scheduler: per-connector auto-syncs and health checks. It
-	// stops when the process shuts down; in-flight syncs record their history.
-	schedCtx, schedCancel := context.WithCancel(ctx)
-	defer schedCancel()
-	go apiSrv.StartScheduler(schedCtx)
-
 	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           apiSrv.Routes(),
@@ -98,6 +93,41 @@ func main() {
 		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
+
+	// Release update surface for standalone binaries: check GitHub Releases
+	// in the background and let admins install + restart from the dashboard.
+	// Source builds (Version "dev") never construct it.
+	if cfg.UpdateCheck && api.Version != "dev" {
+		checker := update.NewChecker(api.Version)
+		checker.Logger = logger
+		installer := update.NewInstaller(checker)
+		installer.Logger = logger
+		installer.Restart = func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := srv.Shutdown(shutdownCtx); err != nil {
+				logger.Warn("update restart: shutdown failed", "error", err)
+			}
+			exe, err := os.Executable()
+			if err != nil {
+				logger.Error("update restart: cannot locate binary — start it manually", "error", err)
+				return
+			}
+			logger.Info("update restart: exec-ing new binary", "path", exe)
+			if err := syscall.Exec(exe, os.Args, os.Environ()); err != nil {
+				// The swapped binary is already on disk; only the live
+				// replacement failed.
+				logger.Error("update restart failed — start the binary manually", "error", err)
+			}
+		}
+		apiSrv.SetUpdater(checker, installer)
+	}
+
+	// Background scheduler: per-connector auto-syncs and health checks. It
+	// stops when the process shuts down; in-flight syncs record their history.
+	schedCtx, schedCancel := context.WithCancel(ctx)
+	defer schedCancel()
+	go apiSrv.StartScheduler(schedCtx)
 
 	// Periodically reap expired sessions.
 	go func() {

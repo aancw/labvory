@@ -19,6 +19,7 @@ import (
 	"github.com/aancw/labvory/internal/scheduler"
 	"github.com/aancw/labvory/internal/secrets"
 	"github.com/aancw/labvory/internal/store"
+	"github.com/aancw/labvory/internal/update"
 	"github.com/aancw/labvory/internal/web"
 )
 
@@ -62,6 +63,10 @@ type Server struct {
 	// notifyFailedLoginBurst); guarded by securityMu.
 	securityMu          sync.Mutex
 	failedLoginNotified map[string]time.Time
+	// Release update surface: nil when update checks are disabled in the
+	// configuration (or for source builds without a stamped version).
+	updates   *update.Checker
+	installer *update.Installer
 }
 
 // NewServer constructs the API server with its stores.
@@ -109,10 +114,18 @@ func NewServer(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool, authS
 	}
 }
 
+// SetUpdater installs the GitHub release checker/installer used by the
+// dashboard banner and the admin install endpoint. Call from main after
+// NewServer; leaving it unset disables the update surface.
+func (s *Server) SetUpdater(checker *update.Checker, installer *update.Installer) {
+	s.updates = checker
+	s.installer = installer
+}
+
 // StartScheduler runs the background scheduler (per-connector auto-syncs,
 // later health checks) until ctx is canceled. Call from main in a goroutine.
 func (s *Server) StartScheduler(ctx context.Context) {
-	scheduler.New(s.pool, s.runner, s.logger).Run(ctx)
+	scheduler.New(s.pool, s.runner, s.logger, s.updates).Run(ctx)
 }
 
 // Routes builds the chi router for the API.
@@ -188,6 +201,15 @@ func (s *Server) Routes() http.Handler {
 			r.Post("/", s.handleCreateToken)
 			r.Delete("/{tokenID}", s.handleRevokeToken)
 		})
+
+		// Self-update for standalone binaries: administrators download and
+		// swap in the newest release; the process restarts itself afterwards.
+		r.Route("/update", func(r chi.Router) {
+			r.Use(s.requireAuth)
+			r.Use(s.requireAdmin)
+			r.Use(s.requireTwoFactor)
+			r.Post("/install", s.handleInstallUpdate)
+		})
 	})
 
 	// MCP: streamable HTTP with bearer-token auth (no CSRF — tokens are
@@ -229,6 +251,7 @@ func (s *Server) mountDataRoutes(r chi.Router) {
 	r.Get("/dashboard", s.handleDashboard)
 	r.Get("/activity", s.handleActivity)
 	r.Get("/search", s.handleSearch)
+	r.Get("/update", s.handleGetUpdate)
 
 	// Asset inventory (Phase 2).
 	r.Route("/assets", func(r chi.Router) {

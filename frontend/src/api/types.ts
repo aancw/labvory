@@ -634,3 +634,25 @@ export interface ResolveDomainResult {
   failed: number
   total: number
 }
+
+// ---------- release updates ----------
+
+// UpdateStatus mirrors internal/update.State: the last observed GitHub
+// Releases check. latest/url are empty when no release exists yet.
+export interface UpdateStatus {
+  available: boolean
+  current: string
+  latest?: string
+  url?: string
+  published_at?: string | null
+  checked_at?: string
+  last_error?: string
+}
+
+// InstallUpdateResult arrives just before the server restarts itself.
+export interface InstallUpdateResult {
+  ok: boolean
+  from: string
+  to: string
+  message: string
+}

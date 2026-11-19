@@ -37,6 +37,9 @@ type Config struct {
 	SeedMode string
 	// SecretKey encrypts integration credentials at rest.
 	SecretKey string
+	// UpdateCheck enables the GitHub Releases update check (and with it the
+	// in-UI install). Default true; opt out for fully offline instances.
+	UpdateCheck bool
 }
 
 // fileConfig mirrors the TOML config file. Pointer fields distinguish
@@ -49,6 +52,7 @@ type fileConfig struct {
 	SessionTTL   *string `toml:"session_ttl"`
 	Env          *string `toml:"env"`
 	SeedMode     *string `toml:"seed_mode"`
+	UpdateCheck  *bool   `toml:"update_check"`
 }
 
 // Load resolves configuration with precedence: environment variables over
@@ -82,6 +86,7 @@ func Load(configPath string) (Config, error) {
 		Env:          resolveString(file.Env, "LV_ENV", "production"),
 		SeedMode:     resolveString(file.SeedMode, "LV_SEED_MODE", ""),
 		CookieSecure: resolveBool(file.CookieSecure, "LV_COOKIE_SECURE", false),
+		UpdateCheck:  resolveBool(file.UpdateCheck, "LV_UPDATE_CHECK", true),
 	}
 
 	ttl := os.Getenv("LV_SESSION_TTL")

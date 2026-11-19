@@ -37,6 +37,8 @@ paths:
   /api/v1/auth/change-password: { post: { tags: [auth], summary: "Rotate password (revokes other sessions)", responses: { "200": { description: OK }, "403": { description: Wrong password } } } }
   /api/v1/settings: { get: { tags: [system], summary: "Instance settings", responses: { "200": { description: OK } } }, put: { tags: [system], summary: "Update whitelisted settings (instance/theme, notifications.webhook_url, audit.retention_days, backup.*, security.require_2fa)", responses: { "200": { description: OK }, "422": { description: Invalid } } } }
   /api/v1/dashboard: { get: { tags: [system], summary: "Dashboard aggregates incl. alerts, OS/host/subnet breakdowns", responses: { "200": { description: OK } } } }
+  /api/v1/update: { get: { tags: [system], summary: "Last GitHub Releases update check (available, current, latest, url, checked_at)", responses: { "200": { description: OK } } } }
+  /api/v1/update/install: { post: { tags: [system], summary: "Admin-only: download the newest release, verify sha256, swap the binary, restart (standalone installs only)", responses: { "200": { description: "Applied; server restarting" }, "409": { description: "Disabled/not updatable/up to date" }, "502": { description: "Download or checksum failure" } } } }
   /api/v1/activity:
     get:
       tags: [system]
